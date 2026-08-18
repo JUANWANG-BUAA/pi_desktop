@@ -15,7 +15,9 @@
 | M4 | 原生桌面完成度 | 键盘、中文输入法、可访问性、主题密度、生命周期、多平台 | `feat: harden native desktop experience` |
 | M5 | 发布准备 | 兼容矩阵、打包、升级/卸载/签名验证 | `release: validate pi desktop distribution` |
 
-## 当前阶段：M0（已完成）
+## M0（已完成）
+
+当前工作进入 M1.1；macOS 骨架和本机验证完成，Windows/Linux 原生构建待对应 CI/主机。
 
 - [x] 初始化 Git，默认分支为 `main`。
 - [x] 固定 Flutter Desktop + 官方 `pi --mode rpc` 架构方向。
@@ -23,16 +25,17 @@
 - [x] 明确 Pi 是唯一 Agent、唯一 Session/Model/Tool/Provider 事实来源。
 - [x] 明确桌面端只允许纯 UI 状态；不建立第二套 Agent 状态或本地会话库。
 - [x] 完成设计层越界复核。
-- [ ] 安装 Flutter/Dart 工具链（这是 M1.1 前置条件，不阻碍本阶段文档提交）。
+- [x] 安装 Flutter/Dart 工具链（这是 M1.1 前置条件，不阻碍本阶段文档提交）。
 
-## M1.1：Flutter Desktop 骨架
+## M1.1：Flutter Desktop 骨架（本机部分已完成）
 
-- [ ] 安装并固定 Flutter stable 与 Dart 版本。
-- [ ] 用 Flutter Desktop 官方模板生成平台目录；不引入 WebView、Electron、Tauri WebView。
-- [ ] 只实现可启动窗口和纯 UI 占位布局：左侧 Archive、中间 Transcript、右侧 Inspector、底部 Prompt。
-- [ ] 确认窗口设置只保存大小、位置、面板宽度、主题模式和密度。
-- [ ] 通过 `flutter analyze`、`flutter test` 和三平台构建检查。
-- [ ] 复核：没有 Agent、Provider、Tool、Session 或 Prompt 逻辑。
+- [x] 安装并固定 Flutter stable 与 Dart 版本（Flutter 3.47.0 / Dart 3.13.0）。
+- [x] 用 Flutter Desktop 官方模板生成 macOS、Windows、Linux 平台目录；不引入 WebView、Electron、Tauri WebView。
+- [x] 只实现可启动窗口和纯 UI 占位布局：左侧 Archive、中间 Transcript、右侧 Inspector、底部 Prompt。
+- [x] 窗口设置边界已冻结为大小、位置、面板宽度、主题模式和密度；本阶段不保存 Agent 数据。
+- [x] 通过 `flutter analyze`、`flutter test` 和 macOS Debug 构建检查。
+- [ ] Windows/Linux 原生构建检查（当前 macOS 主机不能执行，留给对应 CI/主机）。
+- [x] 复核：没有 Agent、Provider、Tool、Session 或 Prompt 逻辑。
 
 ## M1.2：Pi RPC Transport
 

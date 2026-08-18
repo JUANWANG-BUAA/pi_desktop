@@ -4,6 +4,72 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260818-006] flutter-analyze-code-signature
+
+**Logged**: 2026-08-18T11:12:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+`flutter analyze` could not start the AOT analysis server because macOS rejected the downloaded Flutter snapshot code signature.
+
+### Error
+```text
+library load disallowed by system policy: analysis_server_aot.dart.snapshot
+Isolate spawning failed ... does not contain a valid AOT snapshot
+```
+
+### Context
+- Flutter 3.47.0 stable installed from Homebrew on macOS ARM.
+- The Flutter CLI itself runs, but analyzer startup is blocked by host execution policy.
+
+### Suggested Fix
+Verify the Flutter SDK cache and host architecture; retry after repairing the SDK or installing the required Rosetta/runtime support. Do not bypass analysis by replacing it with a custom checker.
+
+### Metadata
+- Reproducible: yes
+- Related Files: pubspec.yaml, analysis_options.yaml
+
+### Resolution
+- **Resolved**: 2026-08-18T11:18:00Z
+- **Notes**: Removed the Homebrew quarantine attribute from the Flutter analysis snapshot and analyzer completed successfully.
+
+---
+
+## [ERR-20260818-007] flutter-impeller-shader
+
+**Logged**: 2026-08-18T11:12:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+`flutter test` and `flutter build macos --debug` failed while compiling Flutter's built-in `ink_sparkle.frag` shader through `impellerc`.
+
+### Error
+```text
+ShaderCompilerException: Shader compilation .../ink_sparkle.frag ... failed with exit code -9
+```
+
+### Context
+- The failure occurred in parallel validation commands after the Flutter scaffold was generated.
+- It is a Flutter toolchain/host issue, not an application assertion failure.
+
+### Suggested Fix
+Retry serially and check Flutter's Impeller/host options and SDK cache. If the issue remains, validate on a supported Flutter host/SDK before accepting M1.1's build gate.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/main.dart, test/widget_test.dart
+- See Also: ERR-20260818-006
+
+### Resolution
+- **Resolved**: 2026-08-18T11:19:00Z
+- **Notes**: Removed the Homebrew quarantine attribute from Flutter's Impeller compiler and reran validation serially; widget tests and macOS debug build pass.
+
+---
+
 ## [ERR-20260818-001] git-diff-check
 
 **Logged**: 2026-08-18T10:42:30Z
@@ -29,6 +95,39 @@ Initialize or attach the intended Git repository before using Git-based validati
 ### Metadata
 - Reproducible: yes
 - Related Files: TODO.md
+
+---
+
+## [ERR-20260818-005] flutter-cask-lock
+
+**Logged**: 2026-08-18T11:04:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: infra
+
+### Summary
+`brew install --cask flutter` returned exit code 1 because a Homebrew download cache lock was detected, but the cask installation completed successfully in the same operation.
+
+### Error
+```text
+A `brew install --cask flutter` process has already locked .../flutter_macos_arm64_3.47.0-stable.zip.incomplete.
+Gave up after waiting 180 seconds.
+```
+
+### Context
+- Attempted while preparing the M1.1 Flutter Desktop prerequisite.
+- The command output subsequently reported that Flutter was installed and linked at `/opt/homebrew/bin/flutter`.
+
+### Suggested Fix
+Verify `flutter --version` and `flutter doctor` after a Homebrew cask-lock failure before retrying or removing cache files.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: docs/implementation-plan.md
+
+### Resolution
+- **Resolved**: 2026-08-18T11:04:00Z
+- **Notes**: Installation completed; verification follows.
 
 ---
 

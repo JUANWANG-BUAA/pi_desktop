@@ -5,8 +5,8 @@ Pi Desktop 是 Pi 核心的 Flutter Desktop 原生客户端。它通过官方 `p
 ## 当前状态
 
 - M0：边界冻结、技术基线和 Git 仓库初始化已完成。
-- 产品代码：尚未开始；在 RPC Client 和 UI 实现前不引入自定义 Agent 层。
-- 本地环境：已检测到 Node.js 24.19.0 和 Pi 0.84.2；尚未安装 Flutter/Dart，因此 M1 暂停在工具链准备阶段。
+- M1.1：Flutter Desktop 三平台骨架和纯 UI 壳已完成；尚未接入 Pi RPC。
+- 本地环境：已固定 Flutter 3.47.0 / Dart 3.13.0、Node.js 24.19.0 和 Pi 0.84.2。
 
 ## 边界
 
@@ -16,7 +16,7 @@ Pi 是唯一的 Agent 和事实来源。Pi Desktop 只维护纯 UI 状态，并�
 
 ## 开发顺序
 
-1. 安装并固定 Flutter Desktop 工具链。
+1. ~~安装并固定 Flutter Desktop 工具链~~（M1.1 已完成）。
 2. 先实现最薄的 Pi RPC 进程传输和 JSONL framing。
 3. 再实现 Session 恢复、Prompt、流式事件和 Abort。
 4. 按 TODO.md 的 M2–M5 逐步扩展，不跨阶段引入新 Agent 语义。

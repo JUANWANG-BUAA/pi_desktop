@@ -10,11 +10,13 @@
 | Pi CLI | `pi 0.84.2` |
 | Node.js 要求 | `>=22.19.0`（Pi `package.json` 的 `engines`） |
 | 当前检测到的 Node.js | `v24.19.0` |
+| Flutter | `3.47.0` stable |
+| Dart | `3.13.0` |
 | Session JSONL | 当前版本 `v3`；Pi 可自动迁移旧 v1/v2 |
 | RPC wire baseline | Pi `0.84.2` 的 `docs/rpc.md`；文档未定义独立数字协议版本，暂以 Pi 包版本锁定 |
 | 初始支持范围 | 仅验证并支持 `0.84.2`；扩大范围前必须有兼容性矩阵 |
 
-Flutter/Dart 在当前开发环境尚未安装，因此 Flutter Desktop 骨架和跨平台构建验证是 M1 的前置阻塞项，而不是由 Node/Pi 版本替代完成。
+Flutter/Dart 工具链已安装并固定。当前主机为 macOS ARM，可生成三平台目录并验证 macOS；Windows/Linux 原生构建需要对应主机或 CI。
 
 ## 已阅读的官方依据
 
