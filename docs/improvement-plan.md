@@ -14,16 +14,17 @@
 - [x] Landing 任务卡防重复触发（busy guard）。
 - 不做：`set_auto_retry` 开关 —— Pi 0.84.2 `get_state` 不暴露该标志，桌面端自存开关状态会违反 §4.2「所有 UI 状态都能从 Pi 状态重新构建」；命令保留在 Client API 层。
 
-## S2 RPC 传输层健壮性（P0）
+## S2 RPC 传输层健壮性（P0）✅ 已完成
 
-- [ ] 请求超时：`sendCommand` 支持超时；compact/export 等长命令可覆盖为更长超时。
-- [ ] 关闭语义：close stdin → 宽限等待 → SIGTERM → 宽限等待 → SIGKILL，不再可能无限挂起。
-- [ ] 首个监听者接入前缓冲事件，消除 broadcast 丢弃竞态。
-- [ ] 未匹配的 response 不再泄漏进 events 流，改走 errors 诊断。
-- [ ] JsonlFramer：消除 O(n²) 重组；加最大行长保护（大 Tool 输出场景）。
-- [ ] stdout 畸形 UTF-8 路由到 errors 流（不再逃逸为未捕获 zone 错误）。
-- [ ] stderr 解码错误只做诊断，不再杀 Pi 进程。
-- [ ] 以上每项补对应测试（扩展 fixture：慢关闭、大行、迟到响应、坏 UTF-8 stderr）。
+- [x] 请求超时：默认 60s；compact/export 覆盖为 5 分钟；超时不杀进程、不污染后续命令。
+- [x] 关闭语义：close stdin → 3s 宽限 → SIGTERM → 3s 宽限 → SIGKILL，不再可能无限挂起。
+- [x] 首个监听者接入前缓冲事件（上限 4096 条），消除 broadcast 丢弃竞态。
+- [x] 未匹配/迟到 response 不再泄漏进 events 流，改走 errors 诊断。
+- [x] JsonlFramer：按"remainder+当前块"增量切分（O(chunk)），最大行长 64M 保护。
+- [x] stdout 畸形 UTF-8 捕获后路由到 errors 流（不再逃逸为未捕获 zone 错误）。
+- [x] stderr 使用 allowMalformed 解码且解码错误只做诊断，不再杀 Pi 进程。
+- [x] connect/restart/reconnectIn 生命周期忙锁，杜绝重复点击并发启动两个 Pi 进程。
+- [x] 测试：2MB 大记录、超时、事件缓冲、迟到响应诊断、坏 UTF-8 stderr（48 个测试通过）。
 
 ## S3 前端修复（P1）
 

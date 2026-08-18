@@ -141,6 +141,26 @@ Future<void> main() async {
       case 'stderr':
         stderr.writeln('stderr stays separate');
         _writeResponse(id, type, data: <String, dynamic>{'ok': true});
+      case 'stderr_invalid_utf8':
+        stderr.add(<int>[0xC3, 0x28]);
+        await stderr.flush();
+        _writeResponse(id, type, data: <String, dynamic>{'ok': true});
+      case 'never':
+        break; // Intentionally never responds; client timeout testing.
+      case 'big_line':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{'blob': 'x' * (2 * 1024 * 1024)},
+        );
+      case 'late_response':
+        _write(<String, dynamic>{
+          'type': 'response',
+          'id': 'no-such-id',
+          'command': 'late',
+          'success': true,
+        });
+        _writeResponse(id, type, data: <String, dynamic>{'ok': true});
       case 'request_ui':
         _write(<String, dynamic>{
           'type': 'extension_ui_request',

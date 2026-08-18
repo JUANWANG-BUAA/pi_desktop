@@ -38,6 +38,10 @@ class PiDesktopConnection extends ChangeNotifier {
   String _workingDirectory;
   final Map<String, String>? environment;
 
+  /// Compaction and export run real model/file work inside Pi before they
+  /// respond; give them a longer bound than ordinary command acceptance.
+  static const _longCommandTimeout = Duration(minutes: 5);
+
   PiRpcClient? _client;
   PiSessionProjection? _projection;
   StreamSubscription<PiJsonObject>? _extensionUiSubscription;
@@ -52,6 +56,7 @@ class PiDesktopConnection extends ChangeNotifier {
   String? _extensionTitle;
   String? _extensionEditorText;
   var _isDisposed = false;
+  var _isOperating = false;
   Timer? _stderrNotifyTimer;
 
   static String _defaultWorkingDirectory() {
@@ -89,7 +94,11 @@ class PiDesktopConnection extends ChangeNotifier {
   String? get extensionTitle => _extensionTitle;
   String? get extensionEditorText => _extensionEditorText;
 
-  Future<void> connect() async {
+  /// Connects to the official Pi RPC process. Concurrent connect/restart/
+  /// reconnect attempts are dropped instead of racing two child processes.
+  Future<void> connect() => _guarded(_connect);
+
+  Future<void> _connect() async {
     if (_status == PiConnectionStatus.connecting || isConnected) {
       return;
     }
@@ -140,23 +149,39 @@ class PiDesktopConnection extends ChangeNotifier {
 
   /// Restarts the official Pi RPC process in a different working directory.
   /// Pi owns the session files in that folder; this is process cwd, not a second store.
-  Future<void> reconnectIn(String directory) async {
-    final path = directory.trim();
-    if (path.isEmpty) {
-      return;
-    }
-    if (path == _workingDirectory && isConnected) {
-      return;
-    }
-    await disconnect();
-    _workingDirectory = path;
-    _notify();
-    await connect();
+  Future<void> reconnectIn(String directory) {
+    return _guarded(() async {
+      final path = directory.trim();
+      if (path.isEmpty) {
+        return;
+      }
+      if (path == _workingDirectory && isConnected) {
+        return;
+      }
+      await disconnect();
+      _workingDirectory = path;
+      _notify();
+      await _connect();
+    });
   }
 
-  Future<void> restart() async {
-    await disconnect();
-    await connect();
+  Future<void> restart() {
+    return _guarded(() async {
+      await disconnect();
+      await _connect();
+    });
+  }
+
+  Future<void> _guarded(Future<void> Function() action) async {
+    if (_isDisposed || _isOperating) {
+      return;
+    }
+    _isOperating = true;
+    try {
+      await action();
+    } finally {
+      _isOperating = false;
+    }
   }
 
   Future<void> disconnect() async {
@@ -313,7 +338,7 @@ class PiDesktopConnection extends ChangeNotifier {
     if (customInstructions != null) {
       fields['customInstructions'] = customInstructions;
     }
-    final response = await _send('compact', fields);
+    final response = await _send('compact', fields, _longCommandTimeout);
     await _projection?.refreshSessionStats();
     return response;
   }
@@ -352,7 +377,7 @@ class PiDesktopConnection extends ChangeNotifier {
     if (outputPath != null) {
       fields['outputPath'] = outputPath;
     }
-    return _send('export_html', fields);
+    return _send('export_html', fields, _longCommandTimeout);
   }
 
   Future<PiRpcResponse> _sessionCommand(
@@ -451,13 +476,14 @@ class PiDesktopConnection extends ChangeNotifier {
   Future<PiRpcResponse> _send(
     String command, [
     Map<String, dynamic> fields = const <String, dynamic>{},
+    Duration? timeout,
   ]) async {
     final client = _client;
     if (client == null || !isConnected) {
       throw StateError('Pi RPC is not connected.');
     }
 
-    final response = await client.sendCommand(command, fields);
+    final response = await client.sendCommand(command, fields, timeout);
     if (!response.success) {
       _errorMessage =
           'Pi RPC command $command failed: ${response.error ?? 'unknown error'}';

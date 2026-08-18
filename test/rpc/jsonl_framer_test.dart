@@ -55,4 +55,21 @@ void main() {
 
     expect(() => framer.add(<int>[0xC3, 0x28]), throwsFormatException);
   });
+
+  test('splits incrementally across arbitrarily small chunks', () {
+    final lines = <String>[];
+    final framer = JsonlFramer(onLine: lines.add);
+
+    for (final chunk in const <String>['ab', 'c\n', 'de', 'f\ngh\n']) {
+      framer.add(utf8.encode(chunk));
+    }
+
+    expect(lines, <String>['abc', 'def', 'gh']);
+  });
+
+  test('bounds record size so large tool output cannot grow unbounded', () {
+    final framer = JsonlFramer(onLine: (_) {}, maxLineLength: 8);
+
+    expect(() => framer.add(utf8.encode('0123456789')), throwsFormatException);
+  });
 }

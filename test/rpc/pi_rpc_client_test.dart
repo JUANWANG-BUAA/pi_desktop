@@ -149,6 +149,87 @@ void main() {
     expect(exit.exitCode, 7);
     await pendingError;
   });
+
+  test('frames a multi-megabyte record without dropping data', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+
+    final response = await client.sendCommand(
+      'big_line',
+      const <String, dynamic>{},
+      const Duration(seconds: 30),
+    );
+
+    final data = response.data;
+    expect(data, isA<Map>());
+    expect((data as Map)['blob'].toString().length, 2 * 1024 * 1024);
+  });
+
+  test('bounds unresponsive commands with a timeout', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+
+    await expectLater(
+      client.sendCommand(
+        'never',
+        const <String, dynamic>{},
+        const Duration(milliseconds: 150),
+      ),
+      throwsA(isA<PiRpcTimeoutException>()),
+    );
+
+    // A timed-out command must not poison the client for later commands.
+    final state = await client.sendCommand('get_state');
+    expect(state.success, isTrue);
+  });
+
+  test('buffers events emitted before the first listener', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+
+    // The event is written before the response, so completing the command
+    // proves the event already reached the client with no listener attached.
+    final sent = await client.sendCommand('emit_event', <String, dynamic>{
+      'event': <String, dynamic>{'type': 'early_event', 'n': 1},
+    });
+    expect(sent.success, isTrue);
+
+    final event = await client.events.first.timeout(const Duration(seconds: 2));
+    expect(event['type'], 'early_event');
+  });
+
+  test(
+    'reports unmatched responses as diagnostics without killing Pi',
+    () async {
+      final client = await _startFixture(fixtureExecutable);
+      addTearDown(client.close);
+
+      final diagnostic = client.errors.firstWhere(
+        (error) => error.toString().contains('no-such-id'),
+      );
+      final response = await client.sendCommand('late_response');
+      expect(response.success, isTrue);
+      await diagnostic.timeout(const Duration(seconds: 2));
+
+      final alive = await client.sendCommand('get_state');
+      expect(alive.success, isTrue);
+    },
+  );
+
+  test('keeps the session alive when stderr carries malformed UTF-8', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+
+    final stderrChunk = client.stderr.firstWhere(
+      (chunk) => chunk.contains('�'),
+    );
+    final response = await client.sendCommand('stderr_invalid_utf8');
+    expect(response.success, isTrue);
+    await stderrChunk.timeout(const Duration(seconds: 2));
+
+    final healthy = await client.sendCommand('get_state');
+    expect(healthy.success, isTrue);
+  });
 }
 
 Future<PiRpcClient> _startFixture(String fixtureExecutable) {

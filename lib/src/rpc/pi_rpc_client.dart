@@ -55,6 +55,19 @@ class PiRpcResponse {
   }
 }
 
+/// Raised when Pi does not answer a correlated request in time.
+class PiRpcTimeoutException implements Exception {
+  PiRpcTimeoutException(this.command, this.timeout);
+
+  final String command;
+  final Duration timeout;
+
+  @override
+  String toString() =>
+      'Pi RPC command "$command" did not respond within '
+      '${timeout.inSeconds}s.';
+}
+
 /// The process result exposed after Pi exits.
 class PiRpcExit {
   const PiRpcExit(this.exitCode);
@@ -68,6 +81,9 @@ class PiRpcExit {
 /// It does not schedule prompts, execute tools, or maintain a session model.
 class PiRpcClient {
   PiRpcClient._(this._process) {
+    _events = StreamController<Map<String, dynamic>>.broadcast(
+      onListen: _flushEventBuffer,
+    );
     _done = _watchExit();
     _stdoutFramer = JsonlFramer(onLine: _handleStdoutLine);
     _listenToProcess();
@@ -90,22 +106,35 @@ class PiRpcClient {
     return PiRpcClient._(process);
   }
 
+  /// Default bound for one request/response round trip. Pi answers command
+  /// acceptance quickly; long-running work (compaction, export) must pass an
+  /// explicit longer timeout.
+  static const defaultCommandTimeout = Duration(seconds: 60);
+
+  static const _closeGracePeriod = Duration(seconds: 3);
+  static const _terminateGracePeriod = Duration(seconds: 3);
+  static const _maxBufferedEvents = 4096;
+
   final Process _process;
   final Map<String, Completer<PiRpcResponse>> _pending =
       <String, Completer<PiRpcResponse>>{};
-  final StreamController<Map<String, dynamic>> _events =
-      StreamController<Map<String, dynamic>>.broadcast();
+  final Map<String, Timer> _pendingTimeouts = <String, Timer>{};
+  late final StreamController<Map<String, dynamic>> _events;
   final StreamController<String> _stderr = StreamController<String>.broadcast();
   final StreamController<Object> _errors = StreamController<Object>.broadcast();
+  final List<Map<String, dynamic>> _bufferedEvents = <Map<String, dynamic>>[];
   late final JsonlFramer _stdoutFramer;
   late final Future<PiRpcExit> _done;
 
   var _nextRequestId = 0;
   var _isClosed = false;
   var _isClosing = false;
+  var _hasEventListener = false;
   Future<void> _writeTail = Future<void>.value();
 
   /// Non-response JSON objects from Pi, including asynchronous agent events.
+  /// Events emitted before the first listener are buffered and replayed, so
+  /// nothing Pi says between process start and subscription is dropped.
   Stream<Map<String, dynamic>> get events => _events.stream;
 
   /// Pi stderr, kept separate from the JSONL protocol stream.
@@ -120,9 +149,12 @@ class PiRpcClient {
   bool get isClosed => _isClosed;
 
   /// Sends one direct Pi RPC command and waits for its correlated response.
+  /// The wait is bounded by [timeout] so an unresponsive Pi cannot hang the
+  /// desktop forever; the Pi process itself is left untouched on timeout.
   Future<PiRpcResponse> sendCommand(
     String type, [
     Map<String, dynamic> fields = const <String, dynamic>{},
+    Duration? timeout,
   ]) async {
     _ensureWritable();
 
@@ -131,10 +163,20 @@ class PiRpcClient {
     final completer = Completer<PiRpcResponse>();
     _pending[id] = completer;
 
+    final limit = timeout ?? defaultCommandTimeout;
+    _pendingTimeouts[id] = Timer(limit, () {
+      _pendingTimeouts.remove(id);
+      final pending = _pending.remove(id);
+      if (pending != null && !pending.isCompleted) {
+        pending.completeError(PiRpcTimeoutException(type, limit));
+      }
+    });
+
     try {
       await _writeLine('${jsonEncode(payload)}\n');
     } on Object catch (error, stackTrace) {
       _pending.remove(id);
+      _cancelTimeout(id);
       completer.completeError(error, stackTrace);
     }
 
@@ -168,7 +210,8 @@ class PiRpcClient {
     await _writeLine('${jsonEncode(payload)}\n');
   }
 
-  /// Closes stdin and terminates Pi if it does not exit normally.
+  /// Closes stdin and lets Pi finish on its own; only escalates to SIGTERM,
+  /// then SIGKILL, after bounded grace periods, so shutdown cannot hang.
   Future<PiRpcExit> close() async {
     if (_isClosed) {
       return _done;
@@ -182,10 +225,25 @@ class PiRpcClient {
         _reportError(error, stackTrace);
       }
       if (!_isClosed) {
-        _process.kill(ProcessSignal.sigterm);
+        final exited = await _awaitExit(_closeGracePeriod);
+        if (exited == null && !_isClosed) {
+          _process.kill(ProcessSignal.sigterm);
+          final terminated = await _awaitExit(_terminateGracePeriod);
+          if (terminated == null && !_isClosed) {
+            _process.kill(ProcessSignal.sigkill);
+          }
+        }
       }
     }
     return _done;
+  }
+
+  Future<PiRpcExit?> _awaitExit(Duration limit) async {
+    try {
+      return await _done.timeout(limit);
+    } on TimeoutException {
+      return null;
+    }
   }
 
   Future<void> _writeLine(String line) {
@@ -199,7 +257,13 @@ class PiRpcClient {
 
   void _listenToProcess() {
     _process.stdout.listen(
-      _stdoutFramer.add,
+      (chunk) {
+        try {
+          _stdoutFramer.add(chunk);
+        } on Object catch (error, stackTrace) {
+          _reportError(error, stackTrace);
+        }
+      },
       onError: (Object error, StackTrace stackTrace) {
         _reportError(error, stackTrace);
       },
@@ -212,12 +276,16 @@ class PiRpcClient {
       },
     );
 
-    utf8.decoder
+    // stderr is diagnostic-only: tolerate malformed bytes instead of letting a
+    // decode error terminate the Pi session.
+    const Utf8Decoder(allowMalformed: true)
         .bind(_process.stderr)
         .listen(
           _stderr.add,
           onError: (Object error, StackTrace stackTrace) {
-            _reportError(error, stackTrace);
+            if (!_stderr.isClosed) {
+              _stderr.add('[pi desktop] stderr decode error: $error');
+            }
           },
         );
   }
@@ -245,15 +313,58 @@ class PiRpcClient {
         final id = json['id'];
         if (id is String) {
           final completer = _pending.remove(id);
+          _cancelTimeout(id);
           if (completer != null) {
             completer.complete(PiRpcResponse.fromJson(json));
             return;
           }
+          // Late or duplicate response: nobody is waiting anymore. Surface
+          // it as a diagnostic instead of leaking it into the event stream.
+          _noteError(
+            'Pi RPC response "$id" arrived without a pending request.',
+          );
+          return;
         }
+        _noteError('Pi RPC response without a usable id was ignored.');
+        return;
       }
-      _events.add(json);
+      _emitEvent(json);
     } on Object catch (error, stackTrace) {
       _reportError(error, stackTrace);
+    }
+  }
+
+  void _emitEvent(Map<String, dynamic> json) {
+    if (_events.isClosed) {
+      return;
+    }
+    if (!_hasEventListener && !_events.hasListener) {
+      if (_bufferedEvents.length < _maxBufferedEvents) {
+        _bufferedEvents.add(json);
+      }
+      return;
+    }
+    _events.add(json);
+  }
+
+  void _flushEventBuffer() {
+    if (_hasEventListener || _events.isClosed) {
+      return;
+    }
+    _hasEventListener = true;
+    for (final event in _bufferedEvents) {
+      if (_events.isClosed) {
+        break;
+      }
+      _events.add(event);
+    }
+    _bufferedEvents.clear();
+  }
+
+  /// Diagnostics that must not kill the Pi process.
+  void _noteError(Object error) {
+    if (!_errors.isClosed) {
+      _errors.add(error);
     }
   }
 
@@ -270,11 +381,19 @@ class PiRpcClient {
   void _rejectPending(Object error, [StackTrace? stackTrace]) {
     final pending = List<Completer<PiRpcResponse>>.from(_pending.values);
     _pending.clear();
+    for (final timer in _pendingTimeouts.values) {
+      timer.cancel();
+    }
+    _pendingTimeouts.clear();
     for (final completer in pending) {
       if (!completer.isCompleted) {
         completer.completeError(error, stackTrace);
       }
     }
+  }
+
+  void _cancelTimeout(String id) {
+    _pendingTimeouts.remove(id)?.cancel();
   }
 
   void _ensureWritable() {
