@@ -4,6 +4,378 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260819-001] settings-dialog-material-layer
+
+**Logged**: 2026-08-19T00:00:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+A translucent decorated settings section hid `SwitchListTile` ink effects in widget tests.
+
+### Error
+```text
+ListTile background color or ink splashes may be invisible.
+```
+
+### Context
+- `flutter test` rendered `SwitchListTile` beneath a `DecoratedBox` with a background.
+
+### Suggested Fix
+Use a transparent `Material` inside the decorated section so ListTile ink and state layers have a paint surface.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/ui/settings_dialog.dart
+
+---
+
+## [ERR-20260819-002] enlarged-text-landing-overflow
+
+**Logged**: 2026-08-19T00:00:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+The landing title overflowed horizontally after changing the new text-size preference to its upper range.
+
+### Error
+```text
+A RenderFlex overflowed by 133 pixels on the right.
+```
+
+### Context
+- The landing heading was an unbounded `Text` within a horizontal `Row`.
+
+### Suggested Fix
+Wrap variable-length headings in `Flexible` and permit a bounded second line so display preferences remain usable.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/ui/shell.dart
+
+---
+
+## [ERR-20260819-006] GPU-backed image encoding made the unit test hang
+
+**Logged**: 2026-08-19T00:42:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A widget-engine image encoding test stalled on the macOS GPU backend while testing prompt-image downscaling.
+
+### Resolution
+Moved the regression assertion to the pure dimension-scaling helper. The production encoder remains covered by integration behavior without requiring an engine surface in a unit test.
+
+---
+
+## [ERR-20260819-007] Screenshot helper moved beneath the skill scripts directory
+
+**Logged**: 2026-08-19T00:45:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: verification
+
+### Summary
+The initial visual-regression command referenced the former screenshot-helper location and did not start capture.
+
+### Resolution
+Located the installed helper at `screenshot/scripts/take_screenshot.py`; use that path for subsequent visual checks.
+
+---
+
+## [ERR-20260819-008] Intentional ambient-layer change invalidated shell goldens
+
+**Logged**: 2026-08-19T00:49:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: visual regression
+
+### Summary
+Adding the session-state ambient background changed the approved dark and light shell pixels.
+
+### Resolution
+Inspect the generated failure images, then regenerate only the affected shell goldens once the change is visually confirmed.
+
+---
+
+## [ERR-20260819-001] apply-patch-context-mismatch
+
+**Logged**: 2026-08-19T00:09:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+An UI-layout patch used multiline context that no longer matched dart-formatted source.
+
+### Error
+```text
+apply_patch verification failed: Failed to find expected lines
+```
+
+### Suggested Fix
+Re-read the narrow source range and patch the formatter's current one-line layout.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/ui/shell.dart
+
+---
+
+## [ERR-20260819-002] macos-accessibility-click
+
+**Logged**: 2026-08-19T00:18:50Z
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+macOS System Events rejected an automated click while checking the Inspector file tab.
+
+### Error
+```text
+System Events error -25200
+```
+
+### Suggested Fix
+Use widget and pure catalog tests for this interaction unless accessibility event delivery is available again.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: lib/src/ui/inspector_pane.dart
+
+---
+
+## [ERR-20260819-003] inspector-tab-consolidation-lint
+
+**Logged**: 2026-08-19T00:20:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+Inspector tab consolidation left obsolete command and usage widgets unreferenced.
+
+### Error
+```text
+unused_element: _CommandsTab, _UsageTab
+```
+
+### Suggested Fix
+Remove obsolete widgets after their contents have been retained in the consolidated pages.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/ui/inspector_pane.dart
+
+---
+
+## [ERR-20260819-004] workspace-switcher-test-selector
+
+**Logged**: 2026-08-19T00:28:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The workspace switcher test assumed the test cwd rendered as `/`; a combined corrective patch was then malformed.
+
+### Error
+```text
+Finder found 0 widgets with text "/"
+apply_patch invalid hunk
+```
+
+### Suggested Fix
+Use a semantic selector and apply unrelated file changes in separate patches.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/widget_test.dart, lib/src/ui/archive_pane.dart
+
+---
+
+## [ERR-20260819-005] image-preparation-test-lint
+
+**Logged**: 2026-08-19T00:33:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The new image preparation test retained an unused Canvas local.
+
+### Error
+```text
+unused_local_variable: canvas
+```
+
+### Suggested Fix
+Construct the Canvas directly in the cascade expression.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/ui/image_preparation_test.dart
+
+---
+
+## [ERR-20260818-009] flex-pane-hidden-child-overflow
+
+**Logged**: 2026-08-18T14:50:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: flutter-layout
+
+### Summary
+An attempted Flex-aware side-pane transition retained a fixed-width child while its animated parent width reached zero, causing narrow-window overflow.
+
+### Suggested Fix
+Remove the fixed-width child in the hidden state; only mount it while the pane is visible and clip its entering transition.
+
+### Resolution
+- **Resolved**: 2026-08-18T14:50:00Z
+- **Notes**: Hidden panes now use `SizedBox.shrink()` inside the width animation.
+
+---
+
+## [ERR-20260818-008] infinite-background-animation-test-settle
+
+**Logged**: 2026-08-18T14:40:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: flutter-testing
+
+### Summary
+Widget tests used `pumpAndSettle` after the landing background gained an intentional continuous animation.
+
+### Suggested Fix
+For state assertions around persistent motion, advance a bounded frame duration instead of waiting for all transient callbacks to stop.
+
+### Resolution
+- **Resolved**: 2026-08-18T14:40:00Z
+- **Notes**: Replaced affected settles with bounded pumps; production animation remains continuous.
+
+---
+
+## [ERR-20260818-007] stale-context-bar-import
+
+**Logged**: 2026-08-18T14:30:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: flutter-ui
+
+### Summary
+Replacing the generic session label in the context bar left an unused formatting import.
+
+### Suggested Fix
+Run analysis after display-layer refactors and remove imports whose only call sites were replaced.
+
+### Resolution
+- **Resolved**: 2026-08-18T14:30:00Z
+- **Notes**: Removed the stale import before the final validation run.
+
+---
+
+## [ERR-20260818-006] stale-build-context-after-install
+
+**Logged**: 2026-08-18T14:10:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: flutter-ui
+
+### Summary
+The Pi installer completion handler used the dialog's `BuildContext` after an async npm operation.
+
+### Suggested Fix
+After checking `State.mounted`, show feedback through the State's current `context`.
+
+### Resolution
+- **Resolved**: 2026-08-18T14:10:00Z
+- **Notes**: Replaced the stale context with `this.context` and re-ran analysis.
+
+---
+
+## [ERR-20260818-005] macos-open-relative-app-path
+
+**Logged**: 2026-08-18T14:00:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: visual-regression
+
+### Summary
+A macOS visual-check command passed a relative app bundle to `open -a`, which interprets it as an installed application name rather than a filesystem target.
+
+### Suggested Fix
+Use `open -n` with the explicit bundle path when launching a locally built Flutter application.
+
+### Resolution
+- **Resolved**: 2026-08-18T14:00:00Z
+- **Notes**: The follow-up capture uses the bundle path directly.
+
+---
+
+## [ERR-20260818-011] flutter-ui-api-and-dart-escaping
+
+**Logged**: 2026-08-18T14:10:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+An initial desktop UI patch used unavailable Material icon names and an invalid raw-string quote escape in a Dart regular expression.
+
+### Suggested Fix
+Use icons verified by the target Flutter SDK and simple character checks for path quoting where a regex would make escaping brittle.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/ui/context_bar.dart, lib/src/ui/prompt_bar.dart
+
+---
+
+## [ERR-20260818-012] widget-copy-contract
+
+**Logged**: 2026-08-18T14:20:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The landing-screen copy was intentionally redesigned, but its widget test still asserted the retired UI string.
+
+### Suggested Fix
+Keep visible-copy assertions synchronized with approved UI changes; retain behavioral assertions for the shell structure.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/widget_test.dart, lib/src/ui/shell.dart
+
+---
+
+## [ERR-20260818-013] inspector-tab-visibility
+
+**Logged**: 2026-08-18T14:35:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The narrow Inspector uses a horizontally scrollable TabBar, so the Tools tab is initially outside the 1280px widget-test viewport.
+
+### Suggested Fix
+Use `ensureVisible` before tapping overflowed tabs; retain the narrow-panel scenario to cover real desktop behavior.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/widget_test.dart, lib/src/ui/inspector_pane.dart
+
+---
+
 ## [ERR-20260818-010] rpc-smoke-skip-api
 
 **Logged**: 2026-08-18T11:30:42Z

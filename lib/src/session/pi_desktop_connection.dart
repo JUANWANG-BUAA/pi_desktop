@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -26,29 +27,55 @@ class PiDesktopConnection extends ChangeNotifier {
       '--continue',
       '--no-approve',
     ],
+    String? workingDirectory,
     Map<String, String>? environment,
   }) : arguments = List.unmodifiable(arguments),
+       _workingDirectory = workingDirectory ?? _defaultWorkingDirectory(),
        environment = environment == null ? null : Map.unmodifiable(environment);
 
   final String executable;
   final List<String> arguments;
+  String _workingDirectory;
   final Map<String, String>? environment;
 
   PiRpcClient? _client;
   PiSessionProjection? _projection;
   StreamSubscription<PiJsonObject>? _extensionUiSubscription;
+  StreamSubscription<String>? _stderrSubscription;
   final StreamController<PiJsonObject> _extensionUiRequests =
       StreamController<PiJsonObject>.broadcast();
   final Map<String, String> _extensionStatuses = <String, String>{};
   final Map<String, List<String>> _extensionWidgets = <String, List<String>>{};
+  final List<String> _stderrLines = <String>[];
   PiConnectionStatus _status = PiConnectionStatus.disconnected;
   String? _errorMessage;
   String? _extensionTitle;
   String? _extensionEditorText;
   var _isDisposed = false;
+  Timer? _stderrNotifyTimer;
+
+  static String _defaultWorkingDirectory() {
+    // AppKit launches opened macOS apps with `/` as cwd. That is not a useful
+    // project default and can accidentally expose the whole filesystem to a
+    // direct Pi session. Prefer an explicit non-root launch directory, then
+    // the user's home; persisted workspace preference still wins in app.dart.
+    final launchedFrom = Platform.environment['PWD']?.trim();
+    if (launchedFrom != null &&
+        launchedFrom.isNotEmpty &&
+        launchedFrom != '/' &&
+        Directory(launchedFrom).existsSync()) {
+      return launchedFrom;
+    }
+    final home = Platform.environment['HOME']?.trim();
+    if (home != null && home.isNotEmpty && Directory(home).existsSync()) {
+      return home;
+    }
+    return Directory.current.path;
+  }
 
   PiConnectionStatus get status => _status;
   PiSessionProjection? get projection => _projection;
+  String get workingDirectory => _workingDirectory;
   String? get errorMessage => _errorMessage;
   bool get isConnected => _status == PiConnectionStatus.connected;
   bool get isConnecting => _status == PiConnectionStatus.connecting;
@@ -58,6 +85,7 @@ class PiDesktopConnection extends ChangeNotifier {
       Map.unmodifiable(_extensionStatuses);
   Map<String, List<String>> get extensionWidgets =>
       Map.unmodifiable(_extensionWidgets);
+  List<String> get stderrLines => List.unmodifiable(_stderrLines);
   String? get extensionTitle => _extensionTitle;
   String? get extensionEditorText => _extensionEditorText;
 
@@ -69,19 +97,22 @@ class PiDesktopConnection extends ChangeNotifier {
     _setStatus(PiConnectionStatus.connecting);
     _errorMessage = null;
     _resetExtensionUiState();
+    _stderrLines.clear();
 
     try {
       final client = await PiRpcClient.start(
         executable: executable,
         arguments: arguments,
+        workingDirectory: workingDirectory,
         environment: environment,
       );
       _client = client;
       final projection = PiSessionProjection(client);
-      _projection = projection;
+      _bindProjection(projection);
       _extensionUiSubscription = client.events
           .where((event) => event['type'] == 'extension_ui_request')
           .listen(_handleExtensionUiRequest);
+      _stderrSubscription = client.stderr.listen(_handleStderr);
       unawaited(_watchProcess(client));
       await projection.load();
 
@@ -89,21 +120,40 @@ class PiDesktopConnection extends ChangeNotifier {
         _setStatus(PiConnectionStatus.connected);
       }
     } on Object catch (error) {
-      await _extensionUiSubscription?.cancel();
-      _extensionUiSubscription = null;
-      final failedClient = _client;
-      _client = null;
-      _projection?.dispose();
-      _projection = null;
-      if (failedClient != null && !failedClient.isClosed) {
-        await failedClient.close();
-      }
+      await _tearDownClient(closeClient: true);
       _errorMessage = error.toString();
       _setStatus(PiConnectionStatus.disconnected);
     }
   }
 
-  /// Explicitly restarts the Pi process; no automatic retry is performed.
+  void applyWorkingDirectory(String directory) {
+    final path = directory.trim();
+    if (path.isEmpty || isConnected || isConnecting) {
+      return;
+    }
+    if (path == _workingDirectory) {
+      return;
+    }
+    _workingDirectory = path;
+    _notify();
+  }
+
+  /// Restarts the official Pi RPC process in a different working directory.
+  /// Pi owns the session files in that folder; this is process cwd, not a second store.
+  Future<void> reconnectIn(String directory) async {
+    final path = directory.trim();
+    if (path.isEmpty) {
+      return;
+    }
+    if (path == _workingDirectory && isConnected) {
+      return;
+    }
+    await disconnect();
+    _workingDirectory = path;
+    _notify();
+    await connect();
+  }
+
   Future<void> restart() async {
     await disconnect();
     await connect();
@@ -118,26 +168,29 @@ class PiDesktopConnection extends ChangeNotifier {
     }
 
     _setStatus(PiConnectionStatus.stopping);
-    await _extensionUiSubscription?.cancel();
-    _extensionUiSubscription = null;
-    await client.close();
-    _projection?.dispose();
-    _projection = null;
-    _client = null;
-    _resetExtensionUiState();
+    await _tearDownClient(closeClient: true);
     _setStatus(PiConnectionStatus.disconnected);
   }
 
-  Future<PiRpcResponse> prompt(String message) {
-    return _send('prompt', <String, dynamic>{'message': message});
+  Future<PiRpcResponse> prompt(
+    String message, {
+    List<PiJsonObject> images = const <PiJsonObject>[],
+  }) {
+    return _send('prompt', _messageFields(message, images));
   }
 
-  Future<PiRpcResponse> steer(String message) {
-    return _send('steer', <String, dynamic>{'message': message});
+  Future<PiRpcResponse> steer(
+    String message, {
+    List<PiJsonObject> images = const <PiJsonObject>[],
+  }) {
+    return _send('steer', _messageFields(message, images));
   }
 
-  Future<PiRpcResponse> followUp(String message) {
-    return _send('follow_up', <String, dynamic>{'message': message});
+  Future<PiRpcResponse> followUp(
+    String message, {
+    List<PiJsonObject> images = const <PiJsonObject>[],
+  }) {
+    return _send('follow_up', _messageFields(message, images));
   }
 
   Future<PiRpcResponse> abort() => _send('abort');
@@ -174,18 +227,39 @@ class PiDesktopConnection extends ChangeNotifier {
 
   Future<PiRpcResponse> clone() => _sessionCommand('clone');
 
+  Future<PiRpcResponse> setSessionName(String name) async {
+    final response = await _send('set_session_name', <String, dynamic>{
+      'name': name,
+    });
+    if (response.success) {
+      _projection?.applyStateValue('sessionName', name);
+      unawaited(_projection?.refreshState());
+    }
+    return response;
+  }
+
   Future<PiRpcResponse> setModel(String provider, String modelId) async {
     final response = await _send('set_model', <String, dynamic>{
       'provider': provider,
       'modelId': modelId,
     });
-    await _projection?.load();
+    if (response.success) {
+      _projection?.applyModel(response.data);
+      unawaited(_syncModelChrome());
+    }
     return response;
   }
 
   Future<PiRpcResponse> cycleModel() async {
     final response = await _send('cycle_model');
-    await _projection?.load();
+    if (response.success) {
+      _projection?.applyModel(response.data);
+      final data = response.data;
+      if (data is Map && data['thinkingLevel'] is String) {
+        _projection?.applyThinkingLevel(data['thinkingLevel'] as String);
+      }
+      unawaited(_syncModelChrome());
+    }
     return response;
   }
 
@@ -193,13 +267,44 @@ class PiDesktopConnection extends ChangeNotifier {
     final response = await _send('set_thinking_level', <String, dynamic>{
       'level': level,
     });
-    await _projection?.load();
+    if (response.success) {
+      _projection?.applyThinkingLevel(level);
+      unawaited(_projection?.refreshState());
+    }
     return response;
   }
 
   Future<PiRpcResponse> cycleThinkingLevel() async {
     final response = await _send('cycle_thinking_level');
-    await _projection?.load();
+    if (response.success) {
+      final data = response.data;
+      if (data is Map && data['level'] is String) {
+        _projection?.applyThinkingLevel(data['level'] as String);
+      }
+      unawaited(_projection?.refreshState());
+    }
+    return response;
+  }
+
+  Future<PiRpcResponse> setSteeringMode(String mode) async {
+    final response = await _send('set_steering_mode', <String, dynamic>{
+      'mode': mode,
+    });
+    if (response.success) {
+      _projection?.applyStateValue('steeringMode', mode);
+      unawaited(_projection?.refreshState());
+    }
+    return response;
+  }
+
+  Future<PiRpcResponse> setFollowUpMode(String mode) async {
+    final response = await _send('set_follow_up_mode', <String, dynamic>{
+      'mode': mode,
+    });
+    if (response.success) {
+      _projection?.applyStateValue('followUpMode', mode);
+      unawaited(_projection?.refreshState());
+    }
     return response;
   }
 
@@ -213,12 +318,25 @@ class PiDesktopConnection extends ChangeNotifier {
     return response;
   }
 
-  Future<PiRpcResponse> setAutoCompaction(bool enabled) {
-    return _send('set_auto_compaction', <String, dynamic>{'enabled': enabled});
+  Future<PiRpcResponse> setAutoCompaction(bool enabled) async {
+    final response = await _send('set_auto_compaction', <String, dynamic>{
+      'enabled': enabled,
+    });
+    if (response.success) {
+      _projection?.applyFlag('autoCompactionEnabled', enabled);
+      unawaited(_projection?.refreshState());
+    }
+    return response;
   }
 
-  Future<PiRpcResponse> setAutoRetry(bool enabled) {
-    return _send('set_auto_retry', <String, dynamic>{'enabled': enabled});
+  Future<PiRpcResponse> setAutoRetry(bool enabled) async {
+    final response = await _send('set_auto_retry', <String, dynamic>{
+      'enabled': enabled,
+    });
+    if (response.success) {
+      unawaited(_projection?.refreshState());
+    }
+    return response;
   }
 
   Future<PiRpcResponse> abortRetry() => _send('abort_retry');
@@ -251,11 +369,12 @@ class PiDesktopConnection extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _stderrNotifyTimer?.cancel();
     unawaited(_extensionUiSubscription?.cancel());
+    unawaited(_stderrSubscription?.cancel());
     unawaited(_extensionUiRequests.close());
     final client = _client;
-    _projection?.dispose();
-    _projection = null;
+    _unbindProjection();
     _client = null;
     if (client != null) {
       unawaited(client.close());
@@ -303,6 +422,32 @@ class PiDesktopConnection extends ChangeNotifier {
     }
   }
 
+  void _handleStderr(String chunk) {
+    for (final line in chunk.split('\n')) {
+      final trimmed = line.trimRight();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      _stderrLines.add(trimmed);
+    }
+    if (_stderrLines.length > 40) {
+      _stderrLines.removeRange(0, _stderrLines.length - 40);
+    }
+    _stderrNotifyTimer ??= Timer(const Duration(milliseconds: 120), () {
+      _stderrNotifyTimer = null;
+      _notify();
+    });
+  }
+
+  Future<void> _syncModelChrome() async {
+    final projection = _projection;
+    if (projection == null) {
+      return;
+    }
+    await projection.refreshThinkingLevels(notify: false);
+    await projection.refreshState();
+  }
+
   Future<PiRpcResponse> _send(
     String command, [
     Map<String, dynamic> fields = const <String, dynamic>{},
@@ -327,6 +472,7 @@ class PiDesktopConnection extends ChangeNotifier {
       return;
     }
 
+    await _tearDownClient();
     _errorMessage = exit.exitCode == 0
         ? null
         : 'Pi RPC exited with code ${exit.exitCode}.';
@@ -335,6 +481,41 @@ class PiDesktopConnection extends ChangeNotifier {
           ? PiConnectionStatus.disconnected
           : PiConnectionStatus.crashed,
     );
+  }
+
+  void _bindProjection(PiSessionProjection projection) {
+    _unbindProjection();
+    _projection = projection;
+  }
+
+  void _unbindProjection() {
+    _projection?.dispose();
+    _projection = null;
+  }
+
+  Future<void> _tearDownClient({bool closeClient = false}) async {
+    await _extensionUiSubscription?.cancel();
+    _extensionUiSubscription = null;
+    await _stderrSubscription?.cancel();
+    _stderrSubscription = null;
+    final client = _client;
+    _unbindProjection();
+    _client = null;
+    _resetExtensionUiState();
+    if (closeClient && client != null && !client.isClosed) {
+      await client.close();
+    }
+  }
+
+  Map<String, dynamic> _messageFields(
+    String message,
+    List<PiJsonObject> images,
+  ) {
+    final fields = <String, dynamic>{'message': message};
+    if (images.isNotEmpty) {
+      fields['images'] = images;
+    }
+    return fields;
   }
 
   void _setStatus(PiConnectionStatus status) {

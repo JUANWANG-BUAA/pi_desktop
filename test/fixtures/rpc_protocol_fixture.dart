@@ -26,6 +26,11 @@ Future<void> main() async {
             'thinkingLevel': 'low',
             'isStreaming': false,
             'sessionName': 'Fixture Session',
+            'sessionId': 'fixture-session',
+            'sessionFile': '/tmp/fixture-session.jsonl',
+            'steeringMode': 'all',
+            'followUpMode': 'one-at-a-time',
+            'autoCompactionEnabled': true,
           },
         );
       case 'get_messages':
@@ -88,6 +93,16 @@ Future<void> main() async {
           type,
           data: <String, dynamic>{
             'levels': <String>['low', 'high'],
+          },
+        );
+      case 'get_fork_messages':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'messages': <Map<String, dynamic>>[
+              <String, dynamic>{'entryId': 'entry-1', 'text': 'fixture prompt'},
+            ],
           },
         );
       case 'get_session_stats':

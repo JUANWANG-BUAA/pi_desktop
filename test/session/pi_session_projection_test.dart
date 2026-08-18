@@ -77,6 +77,9 @@ void main() {
     });
     expect(projection.toolEvents, hasLength(1));
     expect(projection.toolEvents.single['result'], 'hello');
+    expect(projection.documents.first.kind, PiTranscriptKind.message);
+    expect(projection.documents.last.kind, PiTranscriptKind.liveTool);
+    expect(projection.forkMessages.single['entryId'], 'entry-1');
 
     await _emit(projection, client, <String, dynamic>{
       'type': 'queue_update',
