@@ -60,6 +60,8 @@ UI 操作只能直接映射到 Pi RPC 或 Pi 已有概念，包括 `prompt`、`s
 4. 持续处理异步 Event 与带 `id` 的 Response；不得假设两者按请求顺序到达。
 5. 关闭时发送 Pi 官方关闭语义并等待进程结束；异常退出时拒绝未完成请求。
 
+macOS Debug/Release 构建不启用 App Sandbox：当前架构需要从桌面端启动官方 Pi 子进程，并让 Pi 按自己的规则访问 Session、Extension、Skill 和配置文件。发布阶段必须单独完成代码签名、Runtime 权限和随包 Pi Runtime 的安全审查；不能通过沙盒绕过或复制 Pi 数据。
+
 ## 复核结论
 
 - Pi Desktop 没有独立 Agent。
