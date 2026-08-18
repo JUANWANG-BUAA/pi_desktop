@@ -38,6 +38,25 @@ The application source and tests contain no desktop Agent loop, custom Provider 
 second Session store, custom Tool scheduler, automatic follow-up/retry orchestration,
 TUI ANSI capture, WebView, Electron or Tauri WebView implementation.
 
+Since M4 this scan is machine-enforced by
+`test/boundary/boundary_scan_test.dart`, which fails the test suite when:
+
+- a custom agent, harness or orchestration declaration appears (TODO.md §0.3);
+- a Provider SDK import, Provider URL or desktop model registry appears (§8);
+- a session database package or second conversation store appears (§9);
+- a desktop-private plugin system or WebView dependency appears (§1.1 / §7);
+- TUI ANSI capture or parsing appears (§0.3);
+- a `lib/` file outside the reviewed allowlist imports `dart:io` (§0.2 / §9.2);
+- an RPC command literal falls outside the official surface frozen in §3.2.
+
+## Commit gate
+
+`tool/check.sh` runs the four checks required by `docs/implementation-plan.md`
+提交规则: `dart format --set-exit-if-changed`, `flutter analyze`, `flutter test`
+(including the boundary scan) and `git diff --check`. `tool/install_hooks.sh`
+installs it as the local pre-commit hook; git hooks are not pushed, so run it
+once per clone.
+
 ## Deliberately pending checks
 
 - Provider-dependent Prompt, Tool, Thinking, Compaction and Retry scenarios require a

@@ -17,6 +17,8 @@ Pi Desktop 是 Pi 核心的 Flutter Desktop 原生客户端。它通过官方 `p
 
 Pi 是唯一的 Agent 和事实来源。Pi Desktop 只维护纯 UI 状态，并直接调用 Pi 官方 RPC；不实现 Agent Loop、Provider Gateway、Tool 调度器、Session 数据库、Prompt 编排器或桌面专属插件协议。
 
+边界合同由 `test/boundary/boundary_scan_test.dart` 机器强制执行；提交前必须通过 `tool/check.sh`（可用 `tool/install_hooks.sh` 安装为 pre-commit 钩子）。
+
 详细边界合同见 [`TODO.md`](TODO.md)，架构说明见 [`docs/architecture.md`](docs/architecture.md)，分阶段执行计划见 [`docs/implementation-plan.md`](docs/implementation-plan.md)。
 
 ## 开发顺序
