@@ -73,6 +73,7 @@ class PiSessionProjection extends ChangeNotifier {
   List<PiJsonObject> _forkMessages = const <PiJsonObject>[];
   List<String> _thinkingLevels = const <String>[];
   PiJsonObject? _sessionStats;
+  PiJsonObject? _liveUsage;
   List<PiJsonObject> _toolEvents = const <PiJsonObject>[];
   List<PiJsonObject> _timelineEvents = const <PiJsonObject>[];
   List<String> _steeringQueue = const <String>[];
@@ -102,6 +103,10 @@ class PiSessionProjection extends ChangeNotifier {
   List<PiJsonObject> get forkMessages => List.unmodifiable(_forkMessages);
   List<String> get thinkingLevels => List.unmodifiable(_thinkingLevels);
   PiJsonObject? get sessionStats => _sessionStats;
+
+  /// Latest cumulative usage Pi reports while streaming
+  /// (`message_update.usage`); `null` before the first streamed turn.
+  PiJsonObject? get liveUsage => _liveUsage;
   List<PiJsonObject> get toolEvents => List.unmodifiable(_toolEvents);
   List<PiJsonObject> get timelineEvents => List.unmodifiable(_timelineEvents);
   List<String> get steeringQueue => List.unmodifiable(_steeringQueue);
@@ -174,6 +179,7 @@ class PiSessionProjection extends ChangeNotifier {
     _streamingTextBuffer = null;
     _streamingThinkingBuffer = null;
     _bashOutputBuffer = null;
+    _liveUsage = null;
     _lastEventType = null;
     _isStreaming = _state?['isStreaming'] == true;
     _lastError = null;
@@ -311,9 +317,16 @@ class PiSessionProjection extends ChangeNotifier {
       case 'agent_settled':
         _isStreaming = false;
         unawaited(_refreshState());
+        // Context usage shifts once a run settles; refresh so the composer
+        // context meter and Session tab stop drifting during long sessions.
+        unawaited(refreshSessionStats());
       case 'message_start':
         _handleMessageStart(event['message']);
       case 'message_update':
+        final usage = event['usage'];
+        if (usage is Map) {
+          _liveUsage = Map<String, dynamic>.from(usage);
+        }
         _handleMessageUpdate(event['assistantMessageEvent']);
         kind = _NotifyKind.stream;
       case 'message_end':

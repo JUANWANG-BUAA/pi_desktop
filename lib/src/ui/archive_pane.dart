@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../rpc/pi_rpc_client.dart';
 import '../session/pi_desktop_connection.dart';
 import '../session/pi_installation.dart';
 import 'content_format.dart';
@@ -250,9 +251,7 @@ class _ArchivePaneState extends State<ArchivePane> {
                           pinned: true,
                           archived: false,
                           onOpen: connection.isConnected
-                              ? () => unawaited(
-                                  connection.switchSession(session.path),
-                                )
+                              ? () => unawaited(_openSession(session.path))
                               : null,
                           onPin: () => unawaited(
                             preferences.toggleSessionPinned(session.path),
@@ -268,9 +267,7 @@ class _ArchivePaneState extends State<ArchivePane> {
                           pinned: false,
                           archived: false,
                           onOpen: connection.isConnected
-                              ? () => unawaited(
-                                  connection.switchSession(session.path),
-                                )
+                              ? () => unawaited(_openSession(session.path))
                               : null,
                           onPin: () => unawaited(
                             preferences.toggleSessionPinned(session.path),
@@ -291,9 +288,7 @@ class _ArchivePaneState extends State<ArchivePane> {
                           pinned: false,
                           archived: true,
                           onOpen: connection.isConnected
-                              ? () => unawaited(
-                                  connection.switchSession(session.path),
-                                )
+                              ? () => unawaited(_openSession(session.path))
                               : null,
                           onPin: () => unawaited(
                             preferences.toggleSessionPinned(session.path),
@@ -421,7 +416,7 @@ class _ArchivePaneState extends State<ArchivePane> {
     );
     if (!context.mounted) return;
     if (selected is PiSessionSummary) {
-      await widget.connection.switchSession(selected.path);
+      await _openSession(selected.path);
       return;
     }
     if (selected == _SessionOpenAction.enterPath) {
@@ -459,7 +454,7 @@ class _ArchivePaneState extends State<ArchivePane> {
     if (path == null || path.trim().isEmpty) {
       return;
     }
-    await widget.connection.switchSession(path.trim());
+    await _openSession(path.trim());
   }
 
   Future<void> _renameSession(BuildContext context) async {
@@ -491,7 +486,35 @@ class _ArchivePaneState extends State<ArchivePane> {
     if (name == null || name.trim().isEmpty) {
       return;
     }
-    await widget.connection.setSessionName(name.trim());
+    final response = await widget.connection.setSessionName(name.trim());
+    if (!response.success) {
+      _notifyProblem(response.error ?? 'Pi rejected set_session_name.');
+    }
+  }
+
+  /// Switches Pi to another session and surfaces failures/cancellations that
+  /// would otherwise disappear into unread diagnostic state.
+  Future<void> _openSession(String path) async {
+    PiRpcResponse response;
+    try {
+      response = await widget.connection.switchSession(path);
+    } on Object catch (error) {
+      _notifyProblem('Pi session switch failed: $error');
+      return;
+    }
+    if (response.cancelledByExtension) {
+      _notifyProblem('A Pi extension cancelled the session switch.');
+    } else if (!response.success) {
+      _notifyProblem(response.error ?? 'Pi rejected switch_session.');
+    }
+  }
+
+  void _notifyProblem(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _installPi(

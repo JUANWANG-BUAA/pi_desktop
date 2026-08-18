@@ -176,6 +176,20 @@ String usageLabel(PiJsonObject stats) {
   return parts.isEmpty ? 'Pi usage available' : parts.join(' · ');
 }
 
+/// Label for the cumulative usage Pi attaches to `message_update` events
+/// while streaming (flat `totalTokens` / nested `cost` shape).
+String streamUsageLabel(PiJsonObject usage) {
+  final parts = <String>[];
+  if (usage['totalTokens'] is num) {
+    parts.add('${usage['totalTokens']} tokens');
+  }
+  final cost = usage['cost'];
+  if (cost is Map && cost['total'] is num) {
+    parts.add('\$${(cost['total'] as num).toStringAsFixed(4)}');
+  }
+  return parts.isEmpty ? 'Pi usage available' : parts.join(' · ');
+}
+
 String _prettyJson(Object value) {
   try {
     return const JsonEncoder.withIndent('  ').convert(value);

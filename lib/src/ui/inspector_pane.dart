@@ -131,6 +131,11 @@ class _InspectorPaneState extends State<InspectorPane>
       final response = await action();
       if (!response.success && mounted) {
         setState(() => _actionError = response.error ?? 'Pi command failed');
+      } else if (response.cancelledByExtension && mounted) {
+        // `fork` / `switch_session` report success with `cancelled: true`
+        // when a Pi extension vetoes them; show that instead of silently
+        // behaving as if the action happened.
+        setState(() => _actionError = 'A Pi extension cancelled this action.');
       } else if (mounted) {
         setState(() => _actionError = null);
       }
@@ -756,6 +761,11 @@ class _SessionTab extends StatelessWidget {
               ? 'Not reported yet'
               : usageLabel(projection!.sessionStats!),
         ),
+        if (projection?.liveUsage != null)
+          MetaRow(
+            label: 'live',
+            value: streamUsageLabel(projection!.liveUsage!),
+          ),
         if (projection?.bashOutput?.isNotEmpty == true) ...[
           const SizedBox(height: 12),
           const SectionLabel('RPC bash'),

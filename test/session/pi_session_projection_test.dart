@@ -101,10 +101,37 @@ void main() {
     });
     expect(projection.lastError, 'fixture extension failed');
 
+    // Streaming usage arrives on message_update and is projected verbatim.
+    await _emit(projection, client, <String, dynamic>{
+      'type': 'message_update',
+      'usage': <String, dynamic>{
+        'totalTokens': 101,
+        'cost': <String, dynamic>{'total': 0.001},
+      },
+      'assistantMessageEvent': <String, dynamic>{
+        'type': 'text_delta',
+        'delta': ' world',
+      },
+    });
+    expect(projection.streamingText, 'hello world');
+    expect(projection.liveUsage?['totalTokens'], 101);
+
+    // Once the run settles the projection refreshes Pi session stats so the
+    // context meter stops drifting (fixture increments on every call).
+    await _emit(projection, client, <String, dynamic>{'type': 'agent_settled'});
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (projection.sessionStats?['tokens']['total'] != 43) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail('agent_settled did not refresh Pi session stats');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
     await projection.load();
     expect(projection.toolEvents, isEmpty);
     expect(projection.timelineEvents, isEmpty);
     expect(projection.streamingText, isNull);
+    expect(projection.liveUsage, isNull);
   });
 }
 

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../rpc/pi_rpc_client.dart';
 import '../session/pi_desktop_connection.dart';
 import '../session/pi_session_projection.dart';
 import 'archive_pane.dart';
@@ -83,7 +84,7 @@ class _ShellLayoutState extends State<_ShellLayout>
                 Icons.history,
                 _connection.isConnected
                     ? () async {
-                        await _connection.switchSession(session.path);
+                        await _switchSession(session.path);
                       }
                     : null,
               ),
@@ -135,6 +136,29 @@ class _ShellLayoutState extends State<_ShellLayout>
       ),
     );
     if (selected != null) await selected.run?.call();
+  }
+
+  Future<void> _switchSession(String path) async {
+    PiRpcResponse response;
+    try {
+      response = await _connection.switchSession(path);
+    } on Object catch (error) {
+      _notify('Pi session switch failed: $error');
+      return;
+    }
+    if (response.cancelledByExtension) {
+      _notify('A Pi extension cancelled the session switch.');
+    } else if (!response.success) {
+      _notify(response.error ?? 'Pi rejected switch_session.');
+    }
+  }
+
+  void _notify(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showSettings() {
@@ -421,7 +445,7 @@ bool _isLanding(PiSessionProjection? projection) {
       projection.toolEvents.isEmpty;
 }
 
-class _LandingWorkspace extends StatelessWidget {
+class _LandingWorkspace extends StatefulWidget {
   const _LandingWorkspace({
     required this.connection,
     required this.preferences,
@@ -431,6 +455,41 @@ class _LandingWorkspace extends StatelessWidget {
   final PiDesktopConnection connection;
   final UiPreferences preferences;
   final FocusNode promptFocus;
+
+  @override
+  State<_LandingWorkspace> createState() => _LandingWorkspaceState();
+}
+
+class _LandingWorkspaceState extends State<_LandingWorkspace> {
+  var _sending = false;
+
+  PiDesktopConnection get connection => widget.connection;
+  UiPreferences get preferences => widget.preferences;
+  FocusNode get promptFocus => widget.promptFocus;
+
+  Future<void> _startTask(String prompt) async {
+    if (_sending || connection.isStreaming) {
+      return;
+    }
+    setState(() => _sending = true);
+    try {
+      final response = await connection.prompt(prompt);
+      if (!response.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response.error ?? 'Pi rejected the prompt.')),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Pi prompt failed: $error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -499,17 +558,17 @@ class _LandingWorkspace extends StatelessWidget {
                     _LandingTask(
                       icon: Icons.account_tree_outlined,
                       label: 'Understand this project',
+                      busy: _sending,
                       onTap: () => unawaited(
-                        connection.prompt(
-                          'Please help me understand this project.',
-                        ),
+                        _startTask('Please help me understand this project.'),
                       ),
                     ),
                     _LandingTask(
                       icon: Icons.manage_search_outlined,
                       label: 'Find insights in files',
+                      busy: _sending,
                       onTap: () => unawaited(
-                        connection.prompt(
+                        _startTask(
                           'Please inspect the project files and surface useful insights.',
                         ),
                       ),
@@ -517,10 +576,9 @@ class _LandingWorkspace extends StatelessWidget {
                     _LandingTask(
                       icon: Icons.edit_note_outlined,
                       label: 'Plan a change',
+                      busy: _sending,
                       onTap: () => unawaited(
-                        connection.prompt(
-                          'Help me plan a change for this project.',
-                        ),
+                        _startTask('Help me plan a change for this project.'),
                       ),
                     ),
                   ],
@@ -539,11 +597,13 @@ class _LandingTask extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.busy = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -551,7 +611,7 @@ class _LandingTask extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: busy ? null : onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 15),

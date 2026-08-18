@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+var _statsCalls = 0;
+
 Future<void> main() async {
   await for (final line
       in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
@@ -106,11 +108,12 @@ Future<void> main() async {
           },
         );
       case 'get_session_stats':
+        _statsCalls += 1;
         _writeResponse(
           id,
           type,
           data: <String, dynamic>{
-            'tokens': <String, dynamic>{'total': 42},
+            'tokens': <String, dynamic>{'total': 41 + _statsCalls},
           },
         );
       case 'emit_event':
@@ -154,6 +157,20 @@ Future<void> main() async {
           'confirmed': command['confirmed'],
           'cancelled': command['cancelled'],
         });
+      case 'prompt':
+        // Pi rejects prompts with success:false (for example when a prompt
+        // races the stream); the desktop must surface this, not swallow it.
+        _writeResponse(
+          id,
+          type,
+          success: false,
+          error: 'fixture rejected prompt',
+        );
+      case 'fork':
+      case 'switch_session':
+        // A Pi extension handler vetoed the action; Pi still reports
+        // success:true with data.cancelled.
+        _writeResponse(id, type, data: <String, dynamic>{'cancelled': true});
       case 'failure':
         _writeResponse(id, type, success: false, error: 'fixture failure');
       case 'exit':

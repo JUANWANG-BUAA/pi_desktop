@@ -23,6 +23,11 @@ class ExtensionHost extends StatefulWidget {
 class _ExtensionHostState extends State<ExtensionHost> {
   late final StreamSubscription<PiJsonObject> _subscription;
 
+  /// Dialog requests currently awaiting a user answer. Pi blocks on each
+  /// `extension_ui_response`, so every tracked id must eventually receive
+  /// one — including when the window closes mid-dialog.
+  final Set<String> _openDialogs = <String>{};
+
   PiDesktopConnection get _connection => widget.connection;
 
   @override
@@ -35,6 +40,10 @@ class _ExtensionHostState extends State<ExtensionHost> {
 
   @override
   void dispose() {
+    for (final requestId in _openDialogs) {
+      unawaited(_respond(requestId, cancelled: true));
+    }
+    _openDialogs.clear();
     unawaited(_subscription.cancel());
     super.dispose();
   }
@@ -46,98 +55,112 @@ class _ExtensionHostState extends State<ExtensionHost> {
     final method = request['method'];
     final requestId = request['id'];
     if (method == 'notify') {
-      if (mounted) {
-        final message = request['message'] as String? ?? '';
+      final message = (request['message'] as String? ?? '').trim();
+      if (mounted && message.isNotEmpty) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
       }
       return;
     }
-    if (requestId is! String || !mounted) {
+    if (requestId is! String) {
+      return;
+    }
+    if (!mounted) {
+      await _respond(requestId, cancelled: true);
       return;
     }
 
-    switch (method) {
-      case 'select':
-        final options = request['options'] is List
-            ? (request['options'] as List).whereType<String>().toList()
-            : const <String>[];
-        final value = await showDialog<String>(
-          context: context,
-          builder: (context) => SimpleDialog(
-            title: Text(request['title'] as String? ?? 'Select'),
-            children: [
-              for (final option in options)
-                SimpleDialogOption(
-                  onPressed: () => Navigator.of(context).pop(option),
-                  child: Text(option),
-                ),
-            ],
-          ),
-        );
-        await _respond(requestId, value: value, cancelled: value == null);
-      case 'confirm':
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(request['title'] as String? ?? 'Confirm'),
-            content: Text(request['message'] as String? ?? ''),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
-            ],
-          ),
-        );
-        await _respond(
-          requestId,
-          confirmed: confirmed,
-          cancelled: confirmed == null,
-        );
-      case 'input':
-      case 'editor':
-        final controller = TextEditingController(
-          text: request['prefill'] as String? ?? '',
-        );
-        final value = await showDialog<String>(
-          context: context,
-          builder: (context) {
-            final tokens = PiTokens.of(context);
-            return AlertDialog(
-              title: Text(request['title'] as String? ?? 'Input'),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: method == 'editor' ? 8 : 1,
-                style: method == 'editor' ? tokens.evidence : tokens.reading,
-                decoration: InputDecoration(
-                  hintText: request['placeholder'] as String?,
-                ),
-              ),
+    _openDialogs.add(requestId);
+    try {
+      switch (method) {
+        case 'select':
+          final options = request['options'] is List
+              ? (request['options'] as List).whereType<String>().toList()
+              : const <String>[];
+          final value = await showDialog<String>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: Text(request['title'] as String? ?? 'Select'),
+              children: [
+                for (final option in options)
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.of(context).pop(option),
+                    child: Text(option),
+                  ),
+              ],
+            ),
+          );
+          await _respond(requestId, value: value, cancelled: value == null);
+        case 'confirm':
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(request['title'] as String? ?? 'Confirm'),
+              content: Text(request['message'] as String? ?? ''),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('No'),
+                ),
                 FilledButton(
-                  onPressed: () => Navigator.of(context).pop(controller.text),
-                  child: const Text('Submit'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Yes'),
                 ),
               ],
-            );
-          },
-        );
-        controller.dispose();
-        await _respond(requestId, value: value, cancelled: value == null);
+            ),
+          );
+          await _respond(
+            requestId,
+            confirmed: confirmed,
+            cancelled: confirmed == null,
+          );
+        case 'input':
+        case 'editor':
+          final controller = TextEditingController(
+            text: request['prefill'] as String? ?? '',
+          );
+          final value = await showDialog<String>(
+            context: context,
+            builder: (context) {
+              final tokens = PiTokens.of(context);
+              return AlertDialog(
+                title: Text(request['title'] as String? ?? 'Input'),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: method == 'editor' ? 8 : 1,
+                  style: method == 'editor' ? tokens.evidence : tokens.reading,
+                  decoration: InputDecoration(
+                    hintText: request['placeholder'] as String?,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(controller.text),
+                    child: const Text('Submit'),
+                  ),
+                ],
+              );
+            },
+          );
+          controller.dispose();
+          await _respond(requestId, value: value, cancelled: value == null);
+        default:
+          // Unknown or TUI-only dialog method: answer with the protocol's
+          // cancellation semantics instead of leaving Pi waiting forever
+          // (TODO.md §7.3).
+          await _respond(requestId, cancelled: true);
+      }
+    } finally {
+      _openDialogs.remove(requestId);
     }
   }
 

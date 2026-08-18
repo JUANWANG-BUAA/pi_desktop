@@ -104,6 +104,31 @@ void main() {
     expect(received['confirmed'], isTrue);
   });
 
+  test('answers Extension UI dialogs with the cancellation record', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+    final uiRequest = client.events.firstWhere(
+      (event) => event['type'] == 'extension_ui_request',
+    );
+    final uiResponse = client.events.firstWhere(
+      (event) => event['type'] == 'ui_response_received',
+    );
+
+    await client.sendCommand('request_ui');
+    final request = await uiRequest;
+    await client.sendExtensionUiResponse(
+      request['id'] as String,
+      cancelled: true,
+    );
+    final received = await uiResponse;
+
+    // Pi hands `undefined`/`false` to the extension for dismissed dialogs;
+    // the desktop must emit the official cancellation record, never silence.
+    expect(received['cancelled'], isTrue);
+    expect(received['confirmed'], isNull);
+    expect(received['value'], isNull);
+  });
+
   test('returns unsuccessful Pi responses without rewriting them', () async {
     final client = await _startFixture(fixtureExecutable);
     addTearDown(client.close);

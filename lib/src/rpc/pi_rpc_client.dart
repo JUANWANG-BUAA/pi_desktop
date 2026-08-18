@@ -44,6 +44,15 @@ class PiRpcResponse {
   final Object? data;
   final String? error;
   final Map<String, dynamic> json;
+
+  /// True when Pi accepted the command but a Pi extension handler cancelled
+  /// it (`fork` / `switch_session` respond `success: true` with
+  /// `data.cancelled: true`). Callers must not treat this as a completed
+  /// action.
+  bool get cancelledByExtension {
+    final payload = data;
+    return payload is Map && payload['cancelled'] == true;
+  }
 }
 
 /// The process result exposed after Pi exits.

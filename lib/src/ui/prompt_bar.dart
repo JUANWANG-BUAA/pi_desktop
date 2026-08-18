@@ -586,7 +586,14 @@ class PromptBarState extends State<PromptBar> {
       _error = null;
     });
     try {
-      await send(outgoing, images: images);
+      final response = await send(outgoing, images: images);
+      if (!response.success) {
+        // Pi rejected the message (for example a `prompt` racing the
+        // stream). Surface the reason and hand the draft back instead of
+        // silently discarding user input.
+        throw StateError(response.error ?? 'Pi rejected the message.');
+      }
+      widget.focusNode.requestFocus();
     } on Object catch (error) {
       if (mounted) {
         setState(() {
