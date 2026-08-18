@@ -322,12 +322,20 @@ class _ContextBar extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           if (connection.errorMessage != null) ...[
-            Tooltip(
-              message: connection.errorMessage!,
-              child: Icon(
-                Icons.error_outline,
-                size: 18,
-                color: Theme.of(context).colorScheme.error,
+            Icon(
+              Icons.error_outline,
+              size: 18,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 180,
+              child: Text(
+                connection.errorMessage!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.error),
               ),
             ),
             const SizedBox(width: 8),
