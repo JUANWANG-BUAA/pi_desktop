@@ -321,6 +321,17 @@ class _ContextBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
+          if (connection.errorMessage != null) ...[
+            Tooltip(
+              message: connection.errorMessage!,
+              child: Icon(
+                Icons.error_outline,
+                size: 18,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (connection.status != PiConnectionStatus.connected &&
               connection.status != PiConnectionStatus.connecting)
             IconButton(
