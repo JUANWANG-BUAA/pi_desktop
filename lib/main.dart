@@ -827,14 +827,17 @@ class _InspectorPaneState extends State<_InspectorPane> {
           if (projection?.commands.isNotEmpty == true) ...[
             _InspectorSection(title: 'Pi commands', value: ''),
             for (final command in projection!.commands.take(8))
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text('/${command['name'] ?? 'unknown'}'),
-                subtitle: Text(
-                  '${command['source'] ?? 'Pi'} · ${command['path'] ?? 'source unavailable'}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('/${command['name'] ?? 'unknown'}'),
+                  subtitle: Text(
+                    '${command['source'] ?? 'Pi'} · ${command['path'] ?? 'source unavailable'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
           ],
@@ -854,25 +857,28 @@ class _InspectorPaneState extends State<_InspectorPane> {
           if (treeEntries.isNotEmpty) ...[
             _InspectorSection(title: 'Session tree', value: ''),
             for (final item in treeEntries)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                selected: _selectedEntryId == item.id,
-                title: Text(item.id),
-                subtitle: Text(
-                  '${item.role} · parent ${item.parentId ?? 'root'}${item.label == null ? '' : ' · ${item.label}'}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () => setState(() => _selectedEntryId = item.id),
-                trailing: IconButton(
-                  tooltip: 'Fork from this Pi Entry',
-                  onPressed: _connection.isConnected
-                      ? () => unawaited(
-                          _runAction(() => _connection.fork(item.id)),
-                        )
-                      : null,
-                  icon: const Icon(Icons.call_split_outlined, size: 18),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  selected: _selectedEntryId == item.id,
+                  title: Text(item.id),
+                  subtitle: Text(
+                    '${item.role} · parent ${item.parentId ?? 'root'}${item.label == null ? '' : ' · ${item.label}'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => setState(() => _selectedEntryId = item.id),
+                  trailing: IconButton(
+                    tooltip: 'Fork from this Pi Entry',
+                    onPressed: _connection.isConnected
+                        ? () => unawaited(
+                            _runAction(() => _connection.fork(item.id)),
+                          )
+                        : null,
+                    icon: const Icon(Icons.call_split_outlined, size: 18),
+                  ),
                 ),
               ),
           ],
