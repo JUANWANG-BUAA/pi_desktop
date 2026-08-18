@@ -47,14 +47,14 @@
 - [x] 编写 framing、UTF-8、CRLF、交错 Event/Response、并发写入和退出测试，并通过官方 Pi RPC smoke test。
 - [x] 复核：Client 是协议转发层，不是 Agent 调度器。
 
-## M1.3：最小可运行客户端
+## M1.3：最小可运行客户端（已完成）
 
-- [ ] 启动后调用 `get_state`、`get_messages`、`get_entries`、`get_tree`。
-- [ ] 使用 `message_start/update/end` 显示文本；最终内容以 `message_end.message` 为准。
-- [ ] 空闲时发送 `prompt`；流式时分别支持 `steer` 与 `follow_up`。
-- [ ] 支持 `abort`、进程异常退出和重新启动。
-- [ ] 不缓存对话为第二事实来源；重启从 Pi Session 恢复。
-- [ ] 完成 M1 行为测试并提交。
+- [x] 启动后调用 `get_state`、`get_messages`、`get_entries`、`get_tree`，并读取 `get_commands`。
+- [x] 使用 `message_start/update/end` 显示文本；最终内容以 `message_end.message` 为准。
+- [x] 空闲时发送 `prompt`；流式时用独立按钮分别发送 `steer` 与 `follow_up`，不自动选择。
+- [x] 支持 `abort`、进程异常退出、显式 Restart 和重复启动。
+- [x] 不缓存对话为第二事实来源；重启从 Pi Session 恢复。
+- [x] 完成 Flutter Widget、RPC、官方 Pi smoke 和连接恢复测试。
 
 ## M2：完整 Pi 会话体验
 

@@ -8,7 +8,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const PiDesktopApp());
+    await tester.pumpWidget(const PiDesktopApp(autoConnect: false));
 
     expect(find.text('Pi Desktop'), findsOneWidget);
     expect(find.text('Session Archive'), findsOneWidget);
