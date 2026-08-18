@@ -64,8 +64,20 @@ once per clone.
   model quota or mutating a user Session.
 - Windows and Linux native builds require the corresponding host or CI runner.
 - Pi `0.84.2` RPC does not expose one unified resource-diagnostics command for all
-  Extension, Skill, Prompt and Theme resources. The client shows `get_commands`
-  source/path data and does not scan or copy Pi private resource directories.
+  Extension, Skill, Prompt and Theme resources, and does not expose a session
+  listing command. To render the Archive/Inspector the client performs two
+  read-only filesystem operations: it lists Pi's session directory and reads
+  the first bytes of each Session JSONL for a title preview
+  (`lib/src/ui/pi_session_catalog.dart`), and it inventories
+  `~/.pi/agent` skill/extension metadata (`lib/src/ui/pi_resource_catalog.dart`).
+  Neither writes, copies, nor parses full session content, and switching still
+  happens only through `switch_session`. This is a documented deviation from
+  the strictest reading of "不直接读写 Session JSONL / 不扫描私有目录" and stays
+  open pending an official Pi RPC for session listing and resource diagnostics.
+- File attachments are sent as Pi-readable `@path` references composed into the
+  prompt text (`prompt_bar.dart`). The added framing text is desktop-authored;
+  it is visible in the composer and not hidden, but it is not an official Pi
+  ImageContent path. Treat it as an open contract question for a future Pi RPC.
 - Packaging a verified Pi runtime, signing, upgrade and uninstall checks belong to M5.
 
 ## Manual launch

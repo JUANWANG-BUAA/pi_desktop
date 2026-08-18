@@ -49,10 +49,10 @@
 - [x] 大 payload framing 测试（已在 S2：2MB 单记录 + 行长上限单测）。
 - [x] abort 命令直通测试（fixture 新增 abort）。
 
-## S5 文档与状态同步
+## S5 文档与状态同步 ✅ 已完成
 
-- [ ] `docs/validation.md` 更新：私有目录扫描与 Session JSONL 只读预览的合同偏差需要决策，先如实记录。
-- [ ] `docs/implementation-plan.md` / README 状态与本轮修复同步。
+- [x] `docs/validation.md` 如实记录两处合同偏差（Session JSONL 只读预览、`~/.pi/agent` 只读清点、`@path` 文件附件），标记为待官方 RPC 或产品决策。
+- [x] `docs/implementation-plan.md` M4 勾选与 README 状态同步；TODO.md 作为边界合同不做单方面勾选。
 
 ## 不做（边界原因）
 

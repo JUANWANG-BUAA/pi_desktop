@@ -76,13 +76,13 @@
 - [x] Extension UI response 使用 Pi 原生 `extension_ui_response`，没有桌面私有协议。
 - [x] 不创建桌面专属 Extension API、资源目录、市场、签名或权限系统。
 
-## M4：桌面完成度
+## M4：桌面完成度（本机已完成，跨平台回归待做）
 
-- [ ] 键盘操作、焦点、无障碍语义和长文本阅读。
-- [ ] 中文输入法；所有文本编辑控件正确处理 composition/IME 状态。
-- [ ] 浅色/深色、字体和密度只改变显示，不改变 Pi 语义。
-- [ ] 进程树、退出、崩溃、重复启动和跨平台路径处理。
-- [ ] macOS、Windows、Linux 构建和手工回归。
+- [x] 键盘操作、焦点和长文本阅读：快捷键（含 Windows/Linux 的 Ctrl 变体）、命令面板、composer 焦点管理已落地；无障碍语义仍只有局部 Semantics，待补。
+- [x] 中文输入法：composer 在 IME composition 期间不触发发送；真实输入法回归仍需手工验证。
+- [x] 浅色/深色、字体和密度只改变显示，不改变 Pi 语义；字体族已带跨平台回退。
+- [x] 进程树、退出、崩溃、重复启动：生命周期忙锁、分级关闭（EOF→SIGTERM→SIGKILL 宽限）、崩溃后错误可见与重启入口已落地；跨平台路径处理补 USERPROFILE 回退。
+- [ ] macOS、Windows、Linux 构建和手工回归（macOS Debug/Release 已验证；Windows/Linux 待对应主机或 CI）。
 
 ## M5：发布
 
