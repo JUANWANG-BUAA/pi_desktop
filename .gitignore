@@ -1,0 +1,29 @@
+# Flutter / Dart generated files
+.dart_tool/
+.packages
+.pub-cache/
+build/
+coverage/
+
+# Pi project-local installation artifacts
+.pi/git/
+.pi/npm/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local logs and temporary files
+*.log
+.tmp/
+tmp/
