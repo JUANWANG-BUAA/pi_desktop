@@ -710,6 +710,10 @@ class _InspectorPaneState extends State<_InspectorPane> {
     final selectedThinking = thinkingLevels.contains(currentThinking)
         ? currentThinking
         : null;
+    final commandSources = (projection?.commands ?? const <PiJsonObject>[])
+        .map((command) => command['source'])
+        .whereType<String>()
+        .toSet();
 
     return _Pane(
       title: 'Inspector',
@@ -815,6 +819,19 @@ class _InspectorPaneState extends State<_InspectorPane> {
                 ),
               ),
           ],
+          _InspectorSection(
+            title: 'Pi resources',
+            value: '${projection?.commands.length ?? 0} command(s)',
+          ),
+          Text(
+            commandSources.isEmpty
+                ? 'Pi returned no command resources.'
+                : 'Sources: ${commandSources.join(', ')}. Paths are shown above.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const Text(
+            'Theme discovery remains Pi-owned; no private desktop scanner is used.',
+          ),
           if (treeEntries.isNotEmpty) ...[
             _InspectorSection(title: 'Session tree', value: ''),
             for (final item in treeEntries)

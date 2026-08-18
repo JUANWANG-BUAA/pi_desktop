@@ -639,22 +639,22 @@ Client API 只能是 Pi RPC 的直接映射，例如：
 
 ### M2：完整 Pi 会话体验
 
-- [ ] Tool 展示。
-- [ ] Thinking 展示。
-- [ ] Session Tree。
-- [ ] Fork / Clone / Resume。
-- [ ] Compaction / Retry。
-- [ ] Model / Thinking Level。
-- [ ] 通过逐步复核。
+- [x] Tool 展示。
+- [x] Thinking 展示。
+- [x] Session Tree。
+- [x] Fork / Clone / Resume。
+- [x] Compaction / Retry。
+- [x] Model / Thinking Level。
+- [ ] 真实 Provider/Tool 行为矩阵和最终逐步复核。
 
 ### M3：Pi 原生扩展兼容
 
-- [ ] Commands。
-- [ ] Skills。
-- [ ] Prompts。
-- [ ] Themes。
-- [ ] Extension UI Protocol。
-- [ ] 明确 TUI-only 限制。
+- [x] Commands：建议来自 Pi `get_commands`。
+- [ ] Skills 的完整资源诊断。
+- [ ] Prompts 的完整资源诊断。
+- [ ] Themes 的完整资源诊断。
+- [x] Extension UI Protocol。
+- [x] 明确 TUI-only 限制。
 - [ ] 通过逐步复核。
 
 ### M4：原生桌面完成度

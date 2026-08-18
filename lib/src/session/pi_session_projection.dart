@@ -80,6 +80,13 @@ class PiSessionProjection extends ChangeNotifier {
     _commands = _readObjectList(
       _requireObject(responses[4], 'get_commands')['commands'],
     );
+    _toolEvents = const <PiJsonObject>[];
+    _timelineEvents = const <PiJsonObject>[];
+    _steeringQueue = const <String>[];
+    _followUpQueue = const <String>[];
+    _streamingText = null;
+    _streamingThinking = null;
+    _lastEventType = null;
     _isStreaming = _state?['isStreaming'] == true;
     _lastError = null;
     _notify();

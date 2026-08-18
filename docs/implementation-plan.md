@@ -17,7 +17,7 @@
 
 ## M0（已完成）
 
-当前工作进入 M1.1；macOS 骨架和本机验证完成，Windows/Linux 原生构建待对应 CI/主机。
+当前代码已完成 M1.1–M1.3，并完成 M2 的主要 UI/RPC 实现和 M3 的 Extension UI/Command 接入；Windows/Linux 原生构建、Provider 行为矩阵和完整资源诊断仍待对应环境或官方 RPC 能力。
 
 - [x] 初始化 Git，默认分支为 `main`。
 - [x] 固定 Flutter Desktop + 官方 `pi --mode rpc` 架构方向。
@@ -68,7 +68,8 @@
 ## M3：Pi 原生扩展兼容（Extension UI 已接入）
 
 - [x] Slash Command 建议直接来自 Pi `get_commands`，发送仍交给 Pi 的原生 Prompt expansion。
-- [ ] 展示 Pi 原生 Extension、Skill、Prompt、Theme 的来源、路径和错误。
+- [x] 展示 Pi `get_commands` 返回的 Extension/Prompt/Skill 命令来源和路径。
+- [ ] 完整展示 Pi 原生 Extension、Skill、Prompt、Theme 的资源错误；当前 `0.84.2` RPC 未提供统一资源诊断命令，不扫描私有目录。
 - [x] 实现 `select`、`confirm`、`input`、`editor` 的请求/响应。
 - [x] 展示 `notify`、`setStatus`、`setWidget`、`setTitle`、`set_editor_text`。
 - [x] 对 `custom()` 等 TUI-only 能力不创建替代行为，保持 Pi RPC 的 `undefined`、no-op 或错误语义。

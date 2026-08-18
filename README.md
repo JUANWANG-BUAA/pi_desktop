@@ -5,11 +5,11 @@ Pi Desktop 是 Pi 核心的 Flutter Desktop 原生客户端。它通过官方 `p
 ## 当前状态
 
 - M0：边界冻结、技术基线和 Git 仓库初始化已完成。
-- M1.1：Flutter Desktop 三平台骨架和纯 UI 壳已完成；尚未接入 Pi RPC。
+- M1.1：Flutter Desktop 三平台骨架和纯 UI 壳已完成；macOS Debug 构建已验证，Windows/Linux 待对应主机或 CI。
 - M1.2：Pi RPC Transport、严格 JSONL framing、响应关联和生命周期测试已完成。
 - M1.3：Session 状态恢复、Transcript 流式投影、Prompt、Steer、Follow-up、Abort 和显式重启已完成。
 - M2：Tool/Thinking/Queue/Compaction/Retry/Tree/Model/Session 控件已接入；真实 Provider 行为矩阵待带凭据的 Pi Session 回归。
-- M3：Pi Extension UI 请求/响应、状态展示和基于 `get_commands` 的 Slash Command 建议已接入；资源诊断待继续完成。
+- M3：Pi Extension UI 请求/响应、状态展示、基于 `get_commands` 的 Slash Command 建议和 Pi 资源来源诊断已接入；完整 Extension/Skill/Prompt/Theme 发现仍受官方 RPC 暴露范围限制。
 - 本地环境：已固定 Flutter 3.47.0 / Dart 3.13.0、Node.js 24.19.0 和 Pi 0.84.2。
 
 ## 边界
@@ -23,6 +23,6 @@ Pi 是唯一的 Agent 和事实来源。Pi Desktop 只维护纯 UI 状态，并�
 1. ~~安装并固定 Flutter Desktop 工具链~~（M1.1 已完成）。
 2. ~~实现最薄的 Pi RPC 进程传输和 JSONL framing~~（M1.2 已完成）。
 3. ~~实现 Session 恢复、Prompt、流式事件和 Abort~~（M1.3 已完成）。
-4. ~~按 TODO.md 的 M2–M5 逐步扩展~~（M2 控件实现已接入；先完成真实 Pi 行为矩阵，再进入 M3）。
+4. M2/M3 的 Pi 原生控件和 Extension UI 已按官方 RPC 接入；真实 Provider 行为矩阵、跨平台打包和发布验证继续按 `docs/implementation-plan.md` 推进。
 
 每个阶段必须通过对应复核和测试后单独 commit；不要提交 API Key、Pi Session JSONL 或本地安装产物。

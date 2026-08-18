@@ -68,6 +68,7 @@ class PiDesktopConnection extends ChangeNotifier {
 
     _setStatus(PiConnectionStatus.connecting);
     _errorMessage = null;
+    _resetExtensionUiState();
 
     try {
       final client = await PiRpcClient.start(
@@ -88,6 +89,15 @@ class PiDesktopConnection extends ChangeNotifier {
         _setStatus(PiConnectionStatus.connected);
       }
     } on Object catch (error) {
+      await _extensionUiSubscription?.cancel();
+      _extensionUiSubscription = null;
+      final failedClient = _client;
+      _client = null;
+      _projection?.dispose();
+      _projection = null;
+      if (failedClient != null && !failedClient.isClosed) {
+        await failedClient.close();
+      }
       _errorMessage = error.toString();
       _setStatus(PiConnectionStatus.disconnected);
     }
@@ -102,6 +112,7 @@ class PiDesktopConnection extends ChangeNotifier {
   Future<void> disconnect() async {
     final client = _client;
     if (client == null) {
+      _resetExtensionUiState();
       _setStatus(PiConnectionStatus.disconnected);
       return;
     }
@@ -113,6 +124,7 @@ class PiDesktopConnection extends ChangeNotifier {
     _projection?.dispose();
     _projection = null;
     _client = null;
+    _resetExtensionUiState();
     _setStatus(PiConnectionStatus.disconnected);
   }
 
@@ -328,6 +340,13 @@ class PiDesktopConnection extends ChangeNotifier {
   void _setStatus(PiConnectionStatus status) {
     _status = status;
     _notify();
+  }
+
+  void _resetExtensionUiState() {
+    _extensionStatuses.clear();
+    _extensionWidgets.clear();
+    _extensionTitle = null;
+    _extensionEditorText = null;
   }
 
   void _notify() {

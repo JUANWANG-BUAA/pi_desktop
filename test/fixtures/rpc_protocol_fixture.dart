@@ -14,6 +14,96 @@ Future<void> main() async {
     final id = command['id'];
 
     switch (type) {
+      case 'get_state':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'model': <String, dynamic>{
+              'provider': 'fixture',
+              'id': 'fixture-model',
+            },
+            'thinkingLevel': 'low',
+            'isStreaming': false,
+            'sessionName': 'Fixture Session',
+          },
+        );
+      case 'get_messages':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'messages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'user', 'content': 'fixture prompt'},
+            ],
+          },
+        );
+      case 'get_entries':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'entries': <Map<String, dynamic>>[
+              <String, dynamic>{'id': 'entry-1', 'type': 'message'},
+            ],
+          },
+        );
+      case 'get_tree':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'tree': <Map<String, dynamic>>[
+              <String, dynamic>{'id': 'entry-1'},
+            ],
+          },
+        );
+      case 'get_commands':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'commands': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'name': 'fixture-command',
+                'source': 'extension',
+                'path': '/fixture/command.ts',
+              },
+            ],
+          },
+        );
+      case 'get_available_models':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'models': <Map<String, dynamic>>[
+              <String, dynamic>{'provider': 'fixture', 'id': 'fixture-model'},
+            ],
+          },
+        );
+      case 'get_available_thinking_levels':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'levels': <String>['low', 'high'],
+          },
+        );
+      case 'get_session_stats':
+        _writeResponse(
+          id,
+          type,
+          data: <String, dynamic>{
+            'tokens': <String, dynamic>{'total': 42},
+          },
+        );
+      case 'emit_event':
+        final event = command['event'];
+        if (event is Map) {
+          _write(Map<String, dynamic>.from(event));
+        }
+        _writeResponse(id, type, data: <String, dynamic>{'ok': true});
       case 'event_then_response':
         _write({'type': 'test_event', 'text': 'before\u2028response'});
         _writeResponse(
