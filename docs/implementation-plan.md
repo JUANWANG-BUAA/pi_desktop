@@ -65,14 +65,15 @@
 - [x] 通过 RPC 实现 Model 和 Thinking Level Picker。
 - [ ] 使用带真实 Tool/Provider 的 Pi Session 完成 M2 行为矩阵；不能在无用户请求时自动消耗模型额度，纳入后续集成回归。
 
-## M3：Pi 原生扩展兼容
+## M3：Pi 原生扩展兼容（Extension UI 已接入）
 
 - [ ] Slash Command 建议直接来自 `get_commands`。
 - [ ] 展示 Pi 原生 Extension、Skill、Prompt、Theme 的来源、路径和错误。
-- [ ] 实现 `select`、`confirm`、`input`、`editor` 的请求/响应。
-- [ ] 展示或按约定忽略 `notify`、`setStatus`、`setWidget`、`setTitle`、`set_editor_text`。
-- [ ] 对 `custom()` 等 TUI-only 能力遵循 Pi RPC 的 `undefined`、no-op 或错误语义。
-- [ ] 不创建桌面专属 Extension API、资源目录、市场、签名或权限系统。
+- [x] 实现 `select`、`confirm`、`input`、`editor` 的请求/响应。
+- [x] 展示 `notify`、`setStatus`、`setWidget`、`setTitle`、`set_editor_text`。
+- [x] 对 `custom()` 等 TUI-only 能力不创建替代行为，保持 Pi RPC 的 `undefined`、no-op 或错误语义。
+- [x] Extension UI response 使用 Pi 原生 `extension_ui_response`，没有桌面私有协议。
+- [x] 不创建桌面专属 Extension API、资源目录、市场、签名或权限系统。
 
 ## M4：桌面完成度
 

@@ -132,6 +132,33 @@ class PiRpcClient {
     return completer.future;
   }
 
+  /// Responds to a Pi Extension UI dialog request.
+  ///
+  /// This is a direct `extension_ui_response` protocol record and does not
+  /// create a second request/response command type.
+  Future<void> sendExtensionUiResponse(
+    String requestId, {
+    String? value,
+    bool? confirmed,
+    bool cancelled = false,
+  }) async {
+    _ensureWritable();
+    final payload = <String, dynamic>{
+      'type': 'extension_ui_response',
+      'id': requestId,
+    };
+    if (value != null) {
+      payload['value'] = value;
+    }
+    if (confirmed != null) {
+      payload['confirmed'] = confirmed;
+    }
+    if (cancelled) {
+      payload['cancelled'] = true;
+    }
+    await _writeLine('${jsonEncode(payload)}\n');
+  }
+
   /// Closes stdin and terminates Pi if it does not exit normally.
   Future<PiRpcExit> close() async {
     if (_isClosed) {

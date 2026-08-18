@@ -33,6 +33,22 @@ Future<void> main() async {
       case 'stderr':
         stderr.writeln('stderr stays separate');
         _writeResponse(id, type, data: <String, dynamic>{'ok': true});
+      case 'request_ui':
+        _write(<String, dynamic>{
+          'type': 'extension_ui_request',
+          'id': 'ui-1',
+          'method': 'confirm',
+          'title': 'Allow?',
+          'message': 'Continue?',
+        });
+        _writeResponse(id, type, data: <String, dynamic>{'accepted': true});
+      case 'extension_ui_response':
+        _write(<String, dynamic>{
+          'type': 'ui_response_received',
+          'value': command['value'],
+          'confirmed': command['confirmed'],
+          'cancelled': command['cancelled'],
+        });
       case 'failure':
         _writeResponse(id, type, success: false, error: 'fixture failure');
       case 'exit':

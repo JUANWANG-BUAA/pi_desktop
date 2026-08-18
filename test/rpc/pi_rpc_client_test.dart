@@ -81,6 +81,29 @@ void main() {
     expect(await stderrFuture, contains('stderr stays separate'));
   });
 
+  test('responds to the official Extension UI sub-protocol', () async {
+    final client = await _startFixture(fixtureExecutable);
+    addTearDown(client.close);
+    final uiRequest = client.events.firstWhere(
+      (event) => event['type'] == 'extension_ui_request',
+    );
+    final uiResponse = client.events.firstWhere(
+      (event) => event['type'] == 'ui_response_received',
+    );
+
+    final accepted = await client.sendCommand('request_ui');
+    final request = await uiRequest;
+    await client.sendExtensionUiResponse(
+      request['id'] as String,
+      confirmed: true,
+    );
+    final received = await uiResponse;
+
+    expect(accepted.success, isTrue);
+    expect(request['method'], 'confirm');
+    expect(received['confirmed'], isTrue);
+  });
+
   test('returns unsuccessful Pi responses without rewriting them', () async {
     final client = await _startFixture(fixtureExecutable);
     addTearDown(client.close);

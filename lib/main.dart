@@ -68,17 +68,154 @@ class _PiDesktopAppState extends State<PiDesktopApp> {
   }
 }
 
-class DesktopShell extends StatelessWidget {
+class DesktopShell extends StatefulWidget {
   const DesktopShell({required this.connection, super.key});
 
   final PiDesktopConnection connection;
 
   @override
+  State<DesktopShell> createState() => _DesktopShellState();
+}
+
+class _DesktopShellState extends State<DesktopShell> {
+  late final StreamSubscription<PiJsonObject> _extensionUiSubscription;
+
+  PiDesktopConnection get _connection => widget.connection;
+
+  @override
+  void initState() {
+    super.initState();
+    _extensionUiSubscription = _connection.extensionUiRequests.listen(
+      _handleExtensionUiRequest,
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_extensionUiSubscription.cancel());
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: connection,
-      builder: (context, child) => _ShellLayout(connection: connection),
+      animation: _connection,
+      builder: (context, child) => _ShellLayout(connection: _connection),
     );
+  }
+
+  Future<void> _handleExtensionUiRequest(PiJsonObject request) async {
+    final method = request['method'];
+    final requestId = request['id'];
+    if (method == 'notify') {
+      if (mounted) {
+        final message = request['message'] as String? ?? '';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+      return;
+    }
+    if (requestId is! String || !mounted) {
+      return;
+    }
+
+    switch (method) {
+      case 'select':
+        final options = request['options'] is List
+            ? (request['options'] as List).whereType<String>().toList()
+            : const <String>[];
+        final value = await showDialog<String>(
+          context: context,
+          builder: (context) => SimpleDialog(
+            title: Text(request['title'] as String? ?? 'Select'),
+            children: [
+              for (final option in options)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(context).pop(option),
+                  child: Text(option),
+                ),
+            ],
+          ),
+        );
+        await _respond(requestId, value: value, cancelled: value == null);
+      case 'confirm':
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(request['title'] as String? ?? 'Confirm'),
+            content: Text(request['message'] as String? ?? ''),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('No'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+        );
+        await _respond(
+          requestId,
+          confirmed: confirmed,
+          cancelled: confirmed == null,
+        );
+      case 'input':
+      case 'editor':
+        final controller = TextEditingController(
+          text: request['prefill'] as String? ?? '',
+        );
+        final value = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(request['title'] as String? ?? 'Input'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: method == 'editor' ? 8 : 1,
+              decoration: InputDecoration(
+                hintText: request['placeholder'] as String?,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Submit'),
+              ),
+            ],
+          ),
+        );
+        controller.dispose();
+        await _respond(requestId, value: value, cancelled: value == null);
+    }
+  }
+
+  Future<void> _respond(
+    String requestId, {
+    String? value,
+    bool? confirmed,
+    bool cancelled = false,
+  }) async {
+    try {
+      await _connection.respondToExtensionUi(
+        requestId,
+        value: value,
+        confirmed: confirmed,
+        cancelled: cancelled,
+      );
+    } on Object {
+      // The Pi process may exit while a dialog is open. Its lifecycle state
+      // remains the source of truth for that failure.
+    }
   }
 }
 
@@ -140,6 +277,7 @@ class _ContextBar extends StatelessWidget {
     final projection = connection.projection;
     final status = _statusData(context, connection.status);
     final model = _modelLabel(projection?.state);
+    final title = connection.extensionTitle ?? 'Pi Desktop';
     final thinking = projection?.state?['thinkingLevel'] as String?;
 
     return Container(
@@ -154,7 +292,7 @@ class _ContextBar extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'Pi Desktop',
+            title,
             style: Theme.of(context).textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.2),
           ),
@@ -935,6 +1073,7 @@ class _PromptBar extends StatefulWidget {
 class _PromptBarState extends State<_PromptBar> {
   final _textController = TextEditingController();
   String? _error;
+  String? _appliedExtensionText;
 
   PiDesktopConnection get _connection => widget.connection;
 
@@ -948,6 +1087,19 @@ class _PromptBarState extends State<_PromptBar> {
   Widget build(BuildContext context) {
     final enabled = _connection.isConnected;
     final streaming = _connection.isStreaming;
+    final widgetLines = _connection.extensionWidgets.values
+        .expand((lines) => lines)
+        .toList(growable: false);
+    final statusText = _connection.extensionStatuses.values.join(' · ');
+    final extensionText = _connection.extensionEditorText;
+    if (extensionText != null && extensionText != _appliedExtensionText) {
+      _appliedExtensionText = extensionText;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _textController.text = extensionText;
+        }
+      });
+    }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
@@ -958,6 +1110,21 @@ class _PromptBarState extends State<_PromptBar> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (statusText.isNotEmpty)
+            Text(
+              statusText,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          if (widgetLines.isNotEmpty)
+            for (final line in widgetLines)
+              Text(
+                line,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
           if (_error != null) ...[
             Text(
               _error!,
