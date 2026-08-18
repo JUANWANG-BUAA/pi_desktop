@@ -4,6 +4,102 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260818-010] rpc-smoke-skip-api
+
+**Logged**: 2026-08-18T11:30:42Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The first optional Pi smoke test used a closure for the Dart test package's `skip` field, which accepts only a bool or reason string.
+
+### Error
+```text
+Invalid argument(s): "skip" must be a String or a bool, was "Closure: () => bool".
+```
+
+### Context
+- The test needs to remain runnable on hosts without a global Pi binary.
+
+### Suggested Fix
+Resolve host availability synchronously before registering the test and pass either `false` or a skip reason string.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/rpc/pi_rpc_smoke_test.dart
+
+### Resolution
+- **Resolved**: 2026-08-18T11:30:42Z
+- **Notes**: Smoke test now uses `Process.runSync` for availability detection and passes the supported skip value.
+
+---
+
+## [ERR-20260818-008] rpc-test-fixture-launch
+
+**Logged**: 2026-08-18T11:30:42Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+RPC integration tests initially spawned Flutter's `flutter_tester` executable instead of a normal Dart process, which injected a VM service banner into stdout and violated JSONL parsing.
+
+### Error
+```text
+FormatException: Unexpected character
+The Dart VM service is listening on http://127.0.0.1:...
+```
+
+### Context
+- `Platform.resolvedExecutable` under `flutter test` is the test runner, not the Dart CLI.
+- A first attempt to compile the fixture through that executable also hung until the child was terminated.
+
+### Suggested Fix
+Use the `dart` executable to compile a temporary native fixture, then spawn that fixture for protocol tests. Never relax the production JSONL parser to accept non-JSON stdout.
+
+### Metadata
+- Reproducible: yes
+- Related Files: test/rpc/pi_rpc_client_test.dart, test/fixtures/rpc_protocol_fixture.dart
+
+### Resolution
+- **Resolved**: 2026-08-18T11:30:42Z
+- **Notes**: RPC fixture tests now compile a temporary executable with `dart compile exe`; all protocol tests pass.
+
+---
+
+## [ERR-20260818-009] rpc-write-serialization
+
+**Logged**: 2026-08-18T11:30:42Z
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Concurrent RPC commands attempted overlapping writes/flushes to one Dart `IOSink`, causing a `StreamSink is bound to a stream` error.
+
+### Error
+```text
+Bad state: StreamSink is bound to a stream
+```
+
+### Context
+- The transport must support multiple outstanding requests even when responses arrive out of order.
+- Response correlation was correct, but stdin writes also need serialization.
+
+### Suggested Fix
+Serialize only writes and flushes; keep response futures independent so Pi events and responses can still arrive asynchronously.
+
+### Metadata
+- Reproducible: yes
+- Related Files: lib/src/rpc/pi_rpc_client.dart
+
+### Resolution
+- **Resolved**: 2026-08-18T11:30:42Z
+- **Notes**: Added a write tail queue while preserving independent pending response completers.
+
+---
+
 ## [ERR-20260818-006] flutter-analyze-code-signature
 
 **Logged**: 2026-08-18T11:12:00Z

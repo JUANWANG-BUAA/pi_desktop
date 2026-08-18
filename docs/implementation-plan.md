@@ -37,15 +37,15 @@
 - [ ] Windows/Linux 原生构建检查（当前 macOS 主机不能执行，留给对应 CI/主机）。
 - [x] 复核：没有 Agent、Provider、Tool、Session 或 Prompt 逻辑。
 
-## M1.2：Pi RPC Transport
+## M1.2：Pi RPC Transport（已完成）
 
-- [ ] 启动官方 `pi --mode rpc`，发布环境不依赖全局 Pi。
-- [ ] stdout 使用 UTF-8 解码器，严格按 LF 分割；允许去除 CRLF 的尾部 `\r`。
-- [ ] stderr 单独收集，绝不进入 stdout JSONL 或 Transcript。
-- [ ] 支持带 `id` 的 Response 关联与无 `id` 的异步 Event 并发到达。
-- [ ] 进程退出时拒绝全部未完成请求；支持 abort 和正常关闭。
-- [ ] 编写 framing、UTF-8、CRLF、交错 Event/Response、大输出和退出测试。
-- [ ] 复核：Client 是协议转发层，不是 Agent 调度器。
+- [x] 开发环境启动官方 `pi --mode rpc`；发布环境不依赖全局 Pi 的打包工作留在 M5。
+- [x] stdout 使用 UTF-8 解码器，严格按 LF 分割；允许去除 CRLF 的尾部 `\r`。
+- [x] stderr 单独收集，绝不进入 stdout JSONL 或 Transcript。
+- [x] 支持带 `id` 的 Response 关联与无 `id` 的异步 Event 并发到达。
+- [x] 进程退出时拒绝全部未完成请求；支持 abort 和正常关闭。
+- [x] 编写 framing、UTF-8、CRLF、交错 Event/Response、并发写入和退出测试，并通过官方 Pi RPC smoke test。
+- [x] 复核：Client 是协议转发层，不是 Agent 调度器。
 
 ## M1.3：最小可运行客户端
 
