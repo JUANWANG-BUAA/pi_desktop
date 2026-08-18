@@ -177,6 +177,8 @@ Future<void> main() async {
           'confirmed': command['confirmed'],
           'cancelled': command['cancelled'],
         });
+      case 'abort':
+        _writeResponse(id, type, data: <String, dynamic>{'ok': true});
       case 'prompt':
         // Pi rejects prompts with success:false (for example when a prompt
         // races the stream); the desktop must surface this, not swallow it.

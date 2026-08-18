@@ -3,10 +3,23 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_desktop/pi_desktop.dart';
 
+import '../support/pi_test_host.dart';
+
 void main() {
-  final piAvailable = _isPiAvailable();
+  final version = piVersion();
 
   test('connects to the official Pi RPC baseline', () async {
+    // The compatibility baseline is pinned; a different pi on PATH must not
+    // silently pass the protocol smoke (docs/pi-baseline.md).
+    expect(
+      version,
+      piBaselineVersion,
+      reason:
+          'docs/pi-baseline.md pins Pi $piBaselineVersion as the RPC '
+          'compatibility baseline. Update the baseline and re-run the '
+          'compatibility checks before widening support.',
+    );
+
     final environment = <String, String>{
       ...Platform.environment,
       'PI_OFFLINE': '1',
@@ -32,13 +45,5 @@ void main() {
     for (final response in responses) {
       expect(response.success, isTrue, reason: response.error);
     }
-  }, skip: piAvailable ? false : 'pi is not installed on this host');
-}
-
-bool _isPiAvailable() {
-  try {
-    return Process.runSync('pi', <String>['--version']).exitCode == 0;
-  } on ProcessException {
-    return false;
-  }
+  }, skip: version == null ? 'pi is not installed on this host' : false);
 }

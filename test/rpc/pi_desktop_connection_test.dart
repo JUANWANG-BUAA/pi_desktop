@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_desktop/pi_desktop.dart';
 
+import '../support/pi_test_host.dart';
+
 void main() {
-  final piAvailable = _isPiAvailable();
+  final piAvailable = isPiAvailable;
 
   test('restores the UI projection from Pi RPC state', () async {
     final connection = PiDesktopConnection(
@@ -34,12 +36,4 @@ void main() {
     await connection.disconnect();
     expect(connection.status, PiConnectionStatus.disconnected);
   }, skip: piAvailable ? false : 'pi is not installed on this host');
-}
-
-bool _isPiAvailable() {
-  try {
-    return Process.runSync('pi', <String>['--version']).exitCode == 0;
-  } on ProcessException {
-    return false;
-  }
 }

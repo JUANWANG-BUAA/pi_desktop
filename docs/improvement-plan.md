@@ -41,13 +41,13 @@
 - [x] 删除死代码：PaneFrame、QuietButton.expanded、_SlotRow、不可达插入分支。
 - [x] golden 按新布局重新生成。
 
-## S4 测试补齐（P1）
+## S4 测试补齐（P1）✅ 已完成
 
-- [ ] 共享 Pi 可用性检测助手，消除两处复制粘贴。
-- [ ] smoke 测试断言 Pi 版本基线（0.84.2）。
-- [ ] errors 流 / 协议错误路径测试。
-- [ ] 大 payload（大 Tool 输出）framing 测试。
-- [ ] abort 语义测试（fixture 支持 abort）。
+- [x] `test/support/pi_test_host.dart` 共享 Pi 版本/可用性检测，消除两处复制粘贴。
+- [x] smoke 测试断言 PATH 上的 pi 版本等于 docs/pi-baseline.md 固定基线 0.84.2（版本漂移必须走基线更新流程）。
+- [x] errors 流 / 协议错误路径测试（已在 S2：迟到响应诊断、坏 UTF-8 stderr）。
+- [x] 大 payload framing 测试（已在 S2：2MB 单记录 + 行长上限单测）。
+- [x] abort 命令直通测试（fixture 新增 abort）。
 
 ## S5 文档与状态同步
 
