@@ -9,7 +9,8 @@ class PiResourceCatalog {
   final String workspacePath;
 
   Future<PiResourceSnapshot> discover() async {
-    final home = Platform.environment['HOME'];
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final agentDir = home == null ? null : Directory('$home/.pi/agent');
     final userSkills = agentDir == null
         ? null

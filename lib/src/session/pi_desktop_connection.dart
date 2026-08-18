@@ -71,7 +71,9 @@ class PiDesktopConnection extends ChangeNotifier {
         Directory(launchedFrom).existsSync()) {
       return launchedFrom;
     }
-    final home = Platform.environment['HOME']?.trim();
+    final home =
+        (Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'])
+            ?.trim();
     if (home != null && home.isNotEmpty && Directory(home).existsSync()) {
       return home;
     }

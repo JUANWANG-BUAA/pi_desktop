@@ -22,6 +22,7 @@ class PromptBar extends StatefulWidget {
     required this.focusNode,
     super.key,
     this.landing = false,
+    this.draftController,
   });
 
   final PiDesktopConnection connection;
@@ -29,12 +30,16 @@ class PromptBar extends StatefulWidget {
   final FocusNode focusNode;
   final bool landing;
 
+  /// Composer draft owned by the shell so the text survives landing/session
+  /// layout swaps. When null the bar keeps a private controller.
+  final TextEditingController? draftController;
+
   @override
   State<PromptBar> createState() => PromptBarState();
 }
 
 class PromptBarState extends State<PromptBar> {
-  final _textController = TextEditingController();
+  TextEditingController? _localController;
   final _images = <_DraftImage>[];
   final _files = <_DraftFile>[];
   String? _error;
@@ -42,10 +47,14 @@ class PromptBarState extends State<PromptBar> {
 
   PiDesktopConnection get _connection => widget.connection;
 
+  TextEditingController get _textController =>
+      widget.draftController ?? (_localController ??= TextEditingController());
+
   @override
   void initState() {
     super.initState();
     widget.focusNode.onKeyEvent = _onKeyEvent;
+    widget.connection.addListener(_applyExtensionEditorText);
   }
 
   @override
@@ -55,13 +64,37 @@ class PromptBarState extends State<PromptBar> {
       oldWidget.focusNode.onKeyEvent = null;
       widget.focusNode.onKeyEvent = _onKeyEvent;
     }
+    if (oldWidget.connection != widget.connection) {
+      oldWidget.connection.removeListener(_applyExtensionEditorText);
+      widget.connection.addListener(_applyExtensionEditorText);
+    }
   }
 
   @override
   void dispose() {
     widget.focusNode.onKeyEvent = null;
-    _textController.dispose();
+    widget.connection.removeListener(_applyExtensionEditorText);
+    _localController?.dispose();
     super.dispose();
+  }
+
+  /// Applies Pi Extension `set_editor_text` from the connection change
+  /// notification instead of scheduling side effects during build.
+  void _applyExtensionEditorText() {
+    final extensionText = _connection.extensionEditorText;
+    if (extensionText == null || extensionText == _appliedExtensionText) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appliedExtensionText = extensionText;
+      _textController.value = TextEditingValue(
+        text: extensionText,
+        selection: TextSelection.collapsed(offset: extensionText.length),
+      );
+    });
   }
 
   @override
@@ -74,19 +107,6 @@ class PromptBarState extends State<PromptBar> {
         .expand((lines) => lines)
         .toList(growable: false);
     final statusText = _connection.extensionStatuses.values.join(' · ');
-    final extensionText = _connection.extensionEditorText;
-    if (extensionText != null && extensionText != _appliedExtensionText) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || extensionText == _appliedExtensionText) {
-          return;
-        }
-        _appliedExtensionText = extensionText;
-        _textController.value = TextEditingValue(
-          text: extensionText,
-          selection: TextSelection.collapsed(offset: extensionText.length),
-        );
-      });
-    }
     final commandSuggestions = commandSuggestionsFor(
       _textController.text,
       projection?.commands ?? const <PiJsonObject>[],
@@ -255,7 +275,7 @@ class PromptBarState extends State<PromptBar> {
                   maxLines: 8,
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
-                  style: tokens.control.copyWith(fontSize: 15, height: 1.45),
+                  style: tokens.control.copyWith(height: 1.45),
                   decoration: InputDecoration(
                     filled: false,
                     hintText: hint,
@@ -468,17 +488,10 @@ class PromptBarState extends State<PromptBar> {
         ? value.text.length
         : value.selection.start;
     final end = value.selection.end < 0 ? start : value.selection.end;
-    var text = insertion;
-    if (start > 0 &&
-        value.text[start - 1] != ' ' &&
-        value.text[start - 1] != '\n' &&
-        !insertion.startsWith('\n')) {
-      text = ' $insertion';
-    }
-    final updated = value.text.replaceRange(start, end, text);
+    final updated = value.text.replaceRange(start, end, insertion);
     _textController.value = TextEditingValue(
       text: updated,
-      selection: TextSelection.collapsed(offset: start + text.length),
+      selection: TextSelection.collapsed(offset: start + insertion.length),
     );
     setState(() {});
   }
@@ -674,37 +687,43 @@ Future<PreparedImage> prepareImageForPi(
         image.height,
         maxDimension: maxDimension,
       );
-      final scale =
-          source.lengthInBytes > maxPayloadBytes && dimensionScale >= 1
+      var scale = source.lengthInBytes > maxPayloadBytes && dimensionScale >= 1
           ? 0.75
           : dimensionScale;
       if (scale >= 1) {
         return PreparedImage(bytes: source, mimeType: sourceMime);
       }
-      final targetWidth = (image.width * scale).round();
-      final targetHeight = (image.height * scale).round();
-      final resizedCodec = await ui.instantiateImageCodec(
-        source,
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-      try {
-        final resized = (await resizedCodec.getNextFrame()).image;
+      // PNG re-encoding inflates photographic JPEGs; keep shrinking until
+      // the payload fits instead of failing on the first attempt.
+      for (var attempt = 0; attempt < 4; attempt++) {
+        final targetWidth = math.max(1, (image.width * scale).round());
+        final targetHeight = math.max(1, (image.height * scale).round());
+        final resizedCodec = await ui.instantiateImageCodec(
+          source,
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        );
         try {
-          final data = await resized.toByteData(format: ui.ImageByteFormat.png);
-          if (data == null || data.lengthInBytes > maxPayloadBytes) {
-            throw StateError('$label remains too large after resizing.');
+          final resized = (await resizedCodec.getNextFrame()).image;
+          try {
+            final data = await resized.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            if (data != null && data.lengthInBytes <= maxPayloadBytes) {
+              return PreparedImage(
+                bytes: data.buffer.asUint8List(),
+                mimeType: 'image/png',
+              );
+            }
+          } finally {
+            resized.dispose();
           }
-          return PreparedImage(
-            bytes: data.buffer.asUint8List(),
-            mimeType: 'image/png',
-          );
         } finally {
-          resized.dispose();
+          resizedCodec.dispose();
         }
-      } finally {
-        resizedCodec.dispose();
+        scale *= 0.7;
       }
+      throw StateError('$label remains too large after resizing.');
     } finally {
       image.dispose();
     }

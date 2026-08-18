@@ -3,59 +3,6 @@ import 'package:flutter/services.dart';
 
 import 'pi_tokens.dart';
 
-class PaneFrame extends StatelessWidget {
-  const PaneFrame({
-    required this.child,
-    super.key,
-    this.title,
-    this.trailing,
-    this.header,
-  });
-
-  final String? title;
-  final Widget child;
-  final Widget? trailing;
-  final Widget? header;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = PiTokens.of(context);
-    return ColoredBox(
-      color: tokens.panel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (header != null)
-            header!
-          else if (title != null)
-            Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: tokens.line)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title!,
-                      style: tokens.control.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  ?trailing,
-                ],
-              ),
-            ),
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
-}
-
 class ResizeHandle extends StatelessWidget {
   const ResizeHandle({required this.onDrag, super.key, this.onDragEnd});
 
@@ -131,20 +78,18 @@ class QuietButton extends StatelessWidget {
     super.key,
     this.tooltip,
     this.icon,
-    this.expanded = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final String? tooltip;
   final IconData? icon;
-  final bool expanded;
 
   @override
   Widget build(BuildContext context) {
     final tokens = PiTokens.of(context);
     final child = Row(
-      mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
           Icon(icon, size: 15, color: tokens.textSoft),
@@ -154,13 +99,7 @@ class QuietButton extends StatelessWidget {
       ],
     );
     final button = OutlinedButton(onPressed: onPressed, child: child);
-    final wrapped = tooltip == null
-        ? button
-        : Tooltip(message: tooltip!, child: button);
-    if (!expanded) {
-      return wrapped;
-    }
-    return SizedBox(width: double.infinity, child: wrapped);
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
 

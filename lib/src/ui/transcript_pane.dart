@@ -30,16 +30,33 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   final _controller = ScrollController();
   var _stickToBottom = true;
   var _showIntermediate = true;
+  String? _sessionId;
 
   @override
   void initState() {
     super.initState();
+    _sessionId = widget.projection?.state?['sessionId'] as String?;
     _controller.addListener(_onScroll);
   }
 
   @override
   void didUpdateWidget(covariant TranscriptPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final sessionId = widget.projection?.state?['sessionId'] as String?;
+    if (sessionId != _sessionId) {
+      // A different Pi session must not inherit the previous one's reading
+      // position: re-anchor at the latest content on switch.
+      _sessionId = sessionId;
+      _stickToBottom = true;
+      if (_controller.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_controller.hasClients) {
+            return;
+          }
+          _controller.jumpTo(_controller.position.maxScrollExtent);
+        });
+      }
+    }
     _scheduleStick();
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'pi_tokens.dart';
 import 'widgets.dart';
@@ -28,17 +29,21 @@ class MarkdownDocument extends StatelessWidget {
                 child: CodeSurface(text: block.text, language: block.language),
               )
             else
-              ..._renderTextBlock(tokens, block.text),
+              ..._renderTextBlock(context, tokens, block.text),
         ],
       ),
     );
   }
 
-  List<Widget> _renderTextBlock(PiTokens tokens, String raw) {
+  List<Widget> _renderTextBlock(
+    BuildContext context,
+    PiTokens tokens,
+    String raw,
+  ) {
     final widgets = <Widget>[];
     final lines = raw.split('\n');
     final paragraph = <String>[];
-    final listItems = <String>[];
+    final listItems = <_ListItem>[];
 
     void flushParagraph() {
       if (paragraph.isEmpty) {
@@ -48,7 +53,7 @@ class MarkdownDocument extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Text.rich(
-            _inline(tokens, paragraph.join('\n')),
+            _inline(context, tokens, paragraph.join('\n')),
             style: serif ? tokens.reading : tokens.control,
           ),
         ),
@@ -66,22 +71,22 @@ class MarkdownDocument extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final item in listItems)
+              for (final entry in listItems)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ListLead(item: item),
+                      _ListLead(item: entry.text, ordinal: entry.ordinal),
                       Expanded(
                         child: Text.rich(
-                          _inline(tokens, _taskText(item)),
+                          _inline(context, tokens, _taskText(entry.text)),
                           style: (serif ? tokens.reading : tokens.control)
                               .copyWith(
-                                color: _taskDone(item)
+                                color: _taskDone(entry.text)
                                     ? tokens.textFaint
                                     : null,
-                                decoration: _taskDone(item)
+                                decoration: _taskDone(entry.text)
                                     ? TextDecoration.lineThrough
                                     : null,
                               ),
@@ -117,7 +122,8 @@ class MarkdownDocument extends StatelessWidget {
       }
       final heading = RegExp(r'^(#{1,4})\s+(.*)$').firstMatch(line);
       final list = RegExp(r'^[-*]\s+(.*)$').firstMatch(line);
-      final numbered = RegExp(r'^\d+\.\s+(.*)$').firstMatch(line);
+      final numbered = RegExp(r'^(\d+)[.)]\s+(.*)$').firstMatch(line);
+      final rule = RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$').hasMatch(line);
       final quote = line.startsWith('> ');
       if (heading != null) {
         flushList();
@@ -140,9 +146,25 @@ class MarkdownDocument extends StatelessWidget {
             ),
           ),
         );
+      } else if (rule) {
+        flushList();
+        flushParagraph();
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: SizedBox(height: 1, child: ColoredBox(color: tokens.line)),
+          ),
+        );
       } else if (list != null || numbered != null) {
         flushParagraph();
-        listItems.add((list ?? numbered)!.group(1)!);
+        listItems.add(
+          list != null
+              ? _ListItem(text: list.group(1)!)
+              : _ListItem(
+                  text: numbered!.group(2)!,
+                  ordinal: int.tryParse(numbered.group(1)!),
+                ),
+        );
       } else if (quote) {
         flushList();
         flushParagraph();
@@ -154,7 +176,7 @@ class MarkdownDocument extends StatelessWidget {
               border: Border(left: BorderSide(color: tokens.accent, width: 2)),
             ),
             child: Text.rich(
-              _inline(tokens, line.substring(2)),
+              _inline(context, tokens, line.substring(2)),
               style: tokens.reading.copyWith(
                 color: tokens.textSoft,
                 fontStyle: FontStyle.italic,
@@ -176,16 +198,36 @@ class MarkdownDocument extends StatelessWidget {
     return widgets;
   }
 
-  TextSpan _inline(PiTokens tokens, String input) {
+  TextSpan _inline(BuildContext context, PiTokens tokens, String input) {
     final spans = <InlineSpan>[];
-    final pattern = RegExp(r'(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)');
+    final pattern = RegExp(
+      r'(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|https?://[^\s)>\]]+|\*[^*]+\*)',
+    );
     var cursor = 0;
     for (final match in pattern.allMatches(input)) {
       if (match.start > cursor) {
         spans.add(TextSpan(text: input.substring(cursor, match.start)));
       }
       final token = match.group(0)!;
-      if (token.startsWith('**')) {
+      if (token.startsWith('[')) {
+        final link = RegExp(r'^\[([^\]]+)\]\(([^)\s]+)\)$').firstMatch(token);
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _LinkText(
+              label: link?.group(1) ?? token,
+              url: link?.group(2) ?? token,
+            ),
+          ),
+        );
+      } else if (token.startsWith('http')) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _LinkText(label: token, url: token),
+          ),
+        );
+      } else if (token.startsWith('**')) {
         spans.add(
           TextSpan(
             text: token.substring(2, token.length - 2),
@@ -227,13 +269,30 @@ bool _taskOpen(String item) => RegExp(r'^\[ \]\s+').hasMatch(item);
 String _taskText(String item) =>
     item.replaceFirst(RegExp(r'^\[[ xX]\]\s+'), '');
 
+class _ListItem {
+  const _ListItem({required this.text, this.ordinal});
+
+  final String text;
+  final int? ordinal;
+}
+
 class _ListLead extends StatelessWidget {
-  const _ListLead({required this.item});
+  const _ListLead({required this.item, this.ordinal});
   final String item;
+  final int? ordinal;
 
   @override
   Widget build(BuildContext context) {
     final tokens = PiTokens.of(context);
+    if (ordinal != null) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 7),
+        child: Text(
+          '$ordinal.',
+          style: tokens.control.copyWith(color: tokens.accent),
+        ),
+      );
+    }
     if (_taskDone(item) || _taskOpen(item)) {
       return Padding(
         padding: const EdgeInsets.only(right: 7, top: 2),
@@ -375,6 +434,49 @@ class _MarkdownTable extends StatelessWidget {
                   ],
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline link. Tapping copies the URL; the desktop intentionally does not
+/// launch browsers itself (no url_launcher dependency, per the boundary).
+class _LinkText extends StatefulWidget {
+  const _LinkText({required this.label, required this.url});
+
+  final String label;
+  final String url;
+
+  @override
+  State<_LinkText> createState() => _LinkTextState();
+}
+
+class _LinkTextState extends State<_LinkText> {
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.url));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text('Copied ${widget.url}')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = PiTokens.of(context);
+    return Tooltip(
+      message: widget.url,
+      child: InkWell(
+        onTap: _copy,
+        borderRadius: BorderRadius.circular(4),
+        child: Text(
+          widget.label,
+          style: tokens.control.copyWith(
+            color: tokens.accent,
+            decoration: TextDecoration.underline,
+            decorationColor: tokens.accent.withValues(alpha: 0.6),
           ),
         ),
       ),

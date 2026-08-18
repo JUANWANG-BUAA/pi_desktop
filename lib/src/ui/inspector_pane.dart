@@ -547,17 +547,17 @@ class _CapabilitiesTabState extends State<_CapabilitiesTab> {
           style: tokens.control.copyWith(color: tokens.textSoft, fontSize: 12),
         ),
         const SizedBox(height: 8),
-        const _SlotRow(
+        const _CapabilityRow(
           name: 'Status + inline widget',
           detail: 'setStatus · setWidget',
           icon: Icons.space_dashboard_outlined,
         ),
-        const _SlotRow(
+        const _CapabilityRow(
           name: 'Composer seed + title',
           detail: 'set_editor_text · setTitle',
           icon: Icons.edit_note_outlined,
         ),
-        const _SlotRow(
+        const _CapabilityRow(
           name: 'Native prompt surface',
           detail: 'notify · select · confirm · input · editor',
           icon: Icons.forum_outlined,
@@ -673,14 +673,6 @@ class _CapabilityRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SlotRow extends _CapabilityRow {
-  const _SlotRow({
-    required super.name,
-    required super.detail,
-    required super.icon,
-  });
 }
 
 class _SessionTab extends StatelessWidget {

@@ -10,7 +10,9 @@ class PiSessionCatalog {
   final String? sessionsRoot;
 
   Future<List<PiSessionSummary>> load() async {
-    final home = Platform.environment['HOME'];
+    // Windows installs commonly expose USERPROFILE rather than HOME.
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     if (home == null && sessionsRoot == null) return const [];
     final root = Directory(sessionsRoot ?? '$home/.pi/agent/sessions');
     if (!await root.exists()) return const [];

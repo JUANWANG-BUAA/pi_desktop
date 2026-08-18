@@ -26,14 +26,20 @@
 - [x] connect/restart/reconnectIn 生命周期忙锁，杜绝重复点击并发启动两个 Pi 进程。
 - [x] 测试：2MB 大记录、超时、事件缓冲、迟到响应诊断、坏 UTF-8 stderr（48 个测试通过）。
 
-## S3 前端修复（P1）
+## S3 前端修复（P1）✅ 已完成
 
-- [ ] 快捷键跨平台对齐：密度切换补 Ctrl 变体（Windows/Linux 当前不可用）。
-- [ ] Markdown：链接可识别（复制 URL 到剪贴板，不引入 url_launcher，保持边界）。
-- [ ] 去掉硬编码 Apple 字体名，改为跨平台字体族回退。
-- [ ] PromptBar：`set_editor_text` 副作用移出 build；硬编码字号跟随 textScale。
-- [ ] 删除死代码：PaneFrame、QuietButton.expanded、_SlotRow、不可达插入分支。
-- [ ] 其余前端审计发现（待审计结果合并）。
+- [x] 草稿持久化：composer 文本由 shell 持有，landding/会话布局切换不再丢草稿；按 sessionId 隔离，会话间不串草稿。
+- [x] 快捷键跨平台对齐：密度切换与 Abort 补 Ctrl 变体。
+- [x] Markdown：有序列表保留序号、链接可点击（复制 URL + 提示，不引入 url_launcher）、水平分割线；新增 3 个 widget 测试。
+- [x] 字体族补 Windows/Linux 回退（Segoe UI / Microsoft YaHei / Ubuntu / Noto / Cascadia / DejaVu）。
+- [x] PromptBar：`set_editor_text` 改为连接变更监听（不再在 build 里做副作用）；输入框字号跟随 textScale。
+- [x] 归档面板可拖拽调宽（复活 setArchiveWidth）。
+- [x] 切换会话时 Transcript 滚动位置重置到底部（不再沿用上一会话位置）。
+- [x] 大图附件：PNG 重编码超限时迭代缩放直到落入 6MB 预算（不再直接报错）。
+- [x] Windows：目录/资源发现回退 USERPROFILE。
+- [x] context bar Export 捕获连接中断异常。
+- [x] 删除死代码：PaneFrame、QuietButton.expanded、_SlotRow、不可达插入分支。
+- [x] golden 按新布局重新生成。
 
 ## S4 测试补齐（P1）
 

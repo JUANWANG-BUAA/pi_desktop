@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../rpc/pi_rpc_client.dart';
 import '../session/pi_desktop_connection.dart';
 import 'pi_tokens.dart';
 import 'ui_preferences.dart';
@@ -208,7 +209,16 @@ class _SessionMenu extends StatelessWidget {
   }
 
   Future<void> _export(BuildContext context) async {
-    final response = await connection.exportHtml();
+    PiRpcResponse response;
+    try {
+      response = await connection.exportHtml();
+    } on Object catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Pi export failed: $error')));
+      }
+      return;
+    }
     if (!context.mounted) {
       return;
     }

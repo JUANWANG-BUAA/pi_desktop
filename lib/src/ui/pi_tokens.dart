@@ -44,29 +44,44 @@ class PiTokens extends ThemeExtension<PiTokens> {
   final PiReadingFont readingFont;
   final double textScale;
 
+  // Font stacks start with the macOS families and fall back through common
+  // Windows/Linux families before the generic CSS names, so typography keeps
+  // its role on every platform instead of collapsing to the OS default.
   static const sansFallbacks = <String>[
     'SF Pro Text',
+    'Segoe UI',
     'PingFang SC',
+    'Microsoft YaHei',
     'Hiragino Sans GB',
     'Helvetica Neue',
+    'Ubuntu',
+    'Noto Sans',
+    'Noto Sans SC',
     'sans-serif',
   ];
 
   static const serifFallbacks = <String>[
     'New York',
     'Iowan Old Style',
+    'Palatino',
+    'Cambria',
     'Songti SC',
     'Noto Serif SC',
     'STSong',
     'Georgia',
+    'Noto Serif',
     'serif',
   ];
 
   static const monoFallbacks = <String>[
     'SF Mono',
     'Menlo',
+    'Cascadia Code',
+    'Cascadia Mono',
     'JetBrains Mono',
     'Consolas',
+    'DejaVu Sans Mono',
+    'Noto Sans Mono',
     'monospace',
   ];
 

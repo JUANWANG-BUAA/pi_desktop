@@ -64,12 +64,44 @@ class _ShellLayoutState extends State<_ShellLayout>
     with TickerProviderStateMixin {
   final _promptFocus = FocusNode(debugLabel: 'Pi prompt');
 
+  /// Composer draft owned here so it survives landing/session layout swaps.
+  /// Text drafts are additionally keyed per Pi session so switching sessions
+  /// does not leak one session's half-typed prompt into another.
+  final _draftController = TextEditingController();
+  final Map<String, String> _sessionDrafts = <String, String>{};
+  String? _draftSessionId;
+
   PiDesktopConnection get _connection => widget.connection;
   UiPreferences get _preferences => widget.preferences;
 
   @override
+  void didUpdateWidget(covariant _ShellLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncDraftSession();
+  }
+
+  void _syncDraftSession() {
+    final sessionId = _connection.projection?.state?['sessionId'] as String?;
+    if (sessionId == _draftSessionId) {
+      return;
+    }
+    if (_draftSessionId != null) {
+      _sessionDrafts[_draftSessionId!] = _draftController.text;
+    }
+    _draftSessionId = sessionId;
+    final draft = sessionId == null ? null : _sessionDrafts[sessionId];
+    if (draft != null && draft != _draftController.text) {
+      _draftController.value = TextEditingValue(
+        text: draft,
+        selection: TextSelection.collapsed(offset: draft.length),
+      );
+    }
+  }
+
+  @override
   void dispose() {
     _promptFocus.dispose();
+    _draftController.dispose();
     super.dispose();
   }
 
@@ -196,7 +228,14 @@ class _ShellLayoutState extends State<_ShellLayout>
         ): const ToggleThemeIntent(),
         const SingleActivator(LogicalKeyboardKey.keyJ, meta: true, shift: true):
             const ToggleDensityIntent(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyJ,
+          control: true,
+          shift: true,
+        ): const ToggleDensityIntent(),
         const SingleActivator(LogicalKeyboardKey.period, meta: true):
+            const AbortIntent(),
+        const SingleActivator(LogicalKeyboardKey.period, control: true):
             const AbortIntent(),
       },
       child: Actions(
@@ -257,21 +296,35 @@ class _ShellLayoutState extends State<_ShellLayout>
                   children: [
                     _AnimatedSidePane(
                       visible: showArchive,
-                      width: _preferences.archiveWidth,
-                      child: BoundConnection(
-                        connection: _connection,
-                        select: (connection, projection) =>
-                            '${connection.status}|${projection?.chromeEpoch}|${projection?.state?['sessionId']}|${connection.errorMessage}',
-                        builder: (context, connection, projection) =>
-                            ArchivePane(
-                              connection: connection,
-                              preferences: _preferences,
-                              workspacePath: connection.workingDirectory,
-                              currentSessionId:
-                                  projection?.state?['sessionId'] as String?,
-                              enableRuntimeInspection:
-                                  widget.enableRuntimeInspection,
+                      width: _preferences.archiveWidth + 8,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: _preferences.archiveWidth,
+                            child: BoundConnection(
+                              connection: _connection,
+                              select: (connection, projection) =>
+                                  '${connection.status}|${projection?.chromeEpoch}|${projection?.state?['sessionId']}|${connection.errorMessage}',
+                              builder: (context, connection, projection) =>
+                                  ArchivePane(
+                                    connection: connection,
+                                    preferences: _preferences,
+                                    workspacePath: connection.workingDirectory,
+                                    currentSessionId:
+                                        projection?.state?['sessionId']
+                                            as String?,
+                                    enableRuntimeInspection:
+                                        widget.enableRuntimeInspection,
+                                  ),
                             ),
+                          ),
+                          ResizeHandle(
+                            onDrag: (delta) => _preferences.setArchiveWidth(
+                              _preferences.archiveWidth + delta,
+                            ),
+                            onDragEnd: _preferences.persistLayout,
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -323,6 +376,7 @@ class _ShellLayoutState extends State<_ShellLayout>
                                         connection: connection,
                                         preferences: _preferences,
                                         promptFocus: _promptFocus,
+                                        draftController: _draftController,
                                       );
                                     }
                                     return Column(
@@ -348,6 +402,8 @@ class _ShellLayoutState extends State<_ShellLayout>
                                                 connection: connection,
                                                 preferences: _preferences,
                                                 focusNode: _promptFocus,
+                                                draftController:
+                                                    _draftController,
                                               ),
                                             ),
                                           ),
@@ -450,11 +506,13 @@ class _LandingWorkspace extends StatefulWidget {
     required this.connection,
     required this.preferences,
     required this.promptFocus,
+    required this.draftController,
   });
 
   final PiDesktopConnection connection;
   final UiPreferences preferences;
   final FocusNode promptFocus;
+  final TextEditingController draftController;
 
   @override
   State<_LandingWorkspace> createState() => _LandingWorkspaceState();
@@ -466,6 +524,7 @@ class _LandingWorkspaceState extends State<_LandingWorkspace> {
   PiDesktopConnection get connection => widget.connection;
   UiPreferences get preferences => widget.preferences;
   FocusNode get promptFocus => widget.promptFocus;
+  TextEditingController get draftController => widget.draftController;
 
   Future<void> _startTask(String prompt) async {
     if (_sending || connection.isStreaming) {
@@ -545,6 +604,7 @@ class _LandingWorkspaceState extends State<_LandingWorkspace> {
                     preferences: preferences,
                     focusNode: promptFocus,
                     landing: true,
+                    draftController: draftController,
                   ),
                   if (connected) ...[
                     // Keep the invitation and composer high on the page, then
