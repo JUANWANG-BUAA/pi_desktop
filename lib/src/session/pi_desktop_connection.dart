@@ -111,6 +111,94 @@ class PiDesktopConnection extends ChangeNotifier {
 
   Future<PiRpcResponse> abort() => _send('abort');
 
+  Future<PiRpcResponse> newSession() => _sessionCommand('new_session');
+
+  Future<PiRpcResponse> switchSession(String sessionPath) {
+    return _sessionCommand('switch_session', <String, dynamic>{
+      'sessionPath': sessionPath,
+    });
+  }
+
+  Future<PiRpcResponse> fork(String entryId) {
+    return _sessionCommand('fork', <String, dynamic>{'entryId': entryId});
+  }
+
+  Future<PiRpcResponse> clone() => _sessionCommand('clone');
+
+  Future<PiRpcResponse> setModel(String provider, String modelId) async {
+    final response = await _send('set_model', <String, dynamic>{
+      'provider': provider,
+      'modelId': modelId,
+    });
+    await _projection?.load();
+    return response;
+  }
+
+  Future<PiRpcResponse> cycleModel() async {
+    final response = await _send('cycle_model');
+    await _projection?.load();
+    return response;
+  }
+
+  Future<PiRpcResponse> setThinkingLevel(String level) async {
+    final response = await _send('set_thinking_level', <String, dynamic>{
+      'level': level,
+    });
+    await _projection?.load();
+    return response;
+  }
+
+  Future<PiRpcResponse> cycleThinkingLevel() async {
+    final response = await _send('cycle_thinking_level');
+    await _projection?.load();
+    return response;
+  }
+
+  Future<PiRpcResponse> compact([String? customInstructions]) async {
+    final fields = <String, dynamic>{};
+    if (customInstructions != null) {
+      fields['customInstructions'] = customInstructions;
+    }
+    final response = await _send('compact', fields);
+    await _projection?.refreshSessionStats();
+    return response;
+  }
+
+  Future<PiRpcResponse> setAutoCompaction(bool enabled) {
+    return _send('set_auto_compaction', <String, dynamic>{'enabled': enabled});
+  }
+
+  Future<PiRpcResponse> setAutoRetry(bool enabled) {
+    return _send('set_auto_retry', <String, dynamic>{'enabled': enabled});
+  }
+
+  Future<PiRpcResponse> abortRetry() => _send('abort_retry');
+
+  Future<PiRpcResponse> getSessionStats() async {
+    final response = await _send('get_session_stats');
+    await _projection?.refreshSessionStats();
+    return response;
+  }
+
+  Future<PiRpcResponse> exportHtml([String? outputPath]) {
+    final fields = <String, dynamic>{};
+    if (outputPath != null) {
+      fields['outputPath'] = outputPath;
+    }
+    return _send('export_html', fields);
+  }
+
+  Future<PiRpcResponse> _sessionCommand(
+    String command, [
+    Map<String, dynamic> fields = const <String, dynamic>{},
+  ]) async {
+    final response = await _send(command, fields);
+    if (response.success) {
+      await _projection?.load();
+    }
+    return response;
+  }
+
   @override
   void dispose() {
     _isDisposed = true;

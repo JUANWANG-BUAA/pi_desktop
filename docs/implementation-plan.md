@@ -56,14 +56,14 @@
 - [x] 不缓存对话为第二事实来源；重启从 Pi Session 恢复。
 - [x] 完成 Flutter Widget、RPC、官方 Pi smoke 和连接恢复测试。
 
-## M2：完整 Pi 会话体验
+## M2：完整 Pi 会话体验（实现完成，行为矩阵待验证）
 
-- [ ] 展示 Tool Call/Result、流式 Bash、Diff、Thinking、错误和截断信息。
-- [ ] 处理 `queue_update`、Compaction、Retry 和 `agent_settled`。
-- [ ] 用 Pi Entry ID/Parent ID/Label 实现 Tree 导航。
-- [ ] 通过 RPC 实现 Session 切换、New、Fork、Clone、Stats、Export。
-- [ ] 通过 RPC 实现 Model 和 Thinking Level Picker。
-- [ ] 完成 M2 对应的 Pi 行为测试。
+- [x] 展示 Tool Call/Result、流式 Tool 更新、Diff、Thinking（默认折叠）、错误和 Pi 提供的截断信息。
+- [x] 处理 `queue_update`、Compaction、Retry、Extension Error 和 `agent_settled`。
+- [x] 使用 Pi Entry ID、Parent ID 和 Label 展示 Session Tree，并通过官方 `fork` / `clone` 操作；当前 `0.84.2` RPC 文档没有独立的 tree-branch 命令，不自行发明。
+- [x] 通过 RPC 实现 Session 切换、New、Fork、Clone、Stats、Export、Compact。
+- [x] 通过 RPC 实现 Model 和 Thinking Level Picker。
+- [ ] 使用带真实 Tool/Provider 的 Pi Session 完成 M2 行为矩阵；不能在无用户请求时自动消耗模型额度，纳入后续集成回归。
 
 ## M3：Pi 原生扩展兼容
 

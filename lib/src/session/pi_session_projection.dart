@@ -29,7 +29,15 @@ class PiSessionProjection extends ChangeNotifier {
   PiJsonObject? _entries;
   PiJsonObject? _tree;
   List<PiJsonObject> _commands = const <PiJsonObject>[];
+  List<PiJsonObject> _availableModels = const <PiJsonObject>[];
+  List<String> _thinkingLevels = const <String>[];
+  PiJsonObject? _sessionStats;
+  List<PiJsonObject> _toolEvents = const <PiJsonObject>[];
+  List<PiJsonObject> _timelineEvents = const <PiJsonObject>[];
+  List<String> _steeringQueue = const <String>[];
+  List<String> _followUpQueue = const <String>[];
   String? _streamingText;
+  String? _streamingThinking;
   String? _lastEventType;
   String? _lastError;
   var _isStreaming = false;
@@ -40,7 +48,15 @@ class PiSessionProjection extends ChangeNotifier {
   PiJsonObject? get entries => _entries;
   PiJsonObject? get tree => _tree;
   List<PiJsonObject> get commands => List.unmodifiable(_commands);
+  List<PiJsonObject> get availableModels => List.unmodifiable(_availableModels);
+  List<String> get thinkingLevels => List.unmodifiable(_thinkingLevels);
+  PiJsonObject? get sessionStats => _sessionStats;
+  List<PiJsonObject> get toolEvents => List.unmodifiable(_toolEvents);
+  List<PiJsonObject> get timelineEvents => List.unmodifiable(_timelineEvents);
+  List<String> get steeringQueue => List.unmodifiable(_steeringQueue);
+  List<String> get followUpQueue => List.unmodifiable(_followUpQueue);
   String? get streamingText => _streamingText;
+  String? get streamingThinking => _streamingThinking;
   String? get lastEventType => _lastEventType;
   String? get lastError => _lastError;
   bool get isStreaming => _isStreaming;
@@ -67,6 +83,49 @@ class PiSessionProjection extends ChangeNotifier {
     _isStreaming = _state?['isStreaming'] == true;
     _lastError = null;
     _notify();
+
+    await refreshModels();
+    await refreshThinkingLevels();
+    await refreshSessionStats();
+  }
+
+  Future<void> refreshModels() async {
+    try {
+      final response = await _client.sendCommand('get_available_models');
+      _availableModels = _readObjectList(
+        _requireObject(response, 'get_available_models')['models'],
+      );
+      _notify();
+    } on Object catch (error) {
+      _lastError = error.toString();
+      _notify();
+    }
+  }
+
+  Future<void> refreshThinkingLevels() async {
+    try {
+      final response = await _client.sendCommand(
+        'get_available_thinking_levels',
+      );
+      _thinkingLevels = _readStringList(
+        _requireObject(response, 'get_available_thinking_levels')['levels'],
+      );
+      _notify();
+    } on Object catch (error) {
+      _lastError = error.toString();
+      _notify();
+    }
+  }
+
+  Future<void> refreshSessionStats() async {
+    try {
+      final response = await _client.sendCommand('get_session_stats');
+      _sessionStats = _requireObject(response, 'get_session_stats');
+      _notify();
+    } on Object catch (error) {
+      _lastError = error.toString();
+      _notify();
+    }
   }
 
   @override
@@ -91,7 +150,26 @@ class PiSessionProjection extends ChangeNotifier {
         _handleMessageUpdate(event['assistantMessageEvent']);
       case 'message_end':
         _streamingText = null;
+        _streamingThinking = null;
         unawaited(_refreshMessages());
+      case 'tool_execution_start':
+      case 'tool_execution_update':
+      case 'tool_execution_end':
+        _upsertToolEvent(event);
+      case 'queue_update':
+        _steeringQueue = _readStringList(event['steering']);
+        _followUpQueue = _readStringList(event['followUp']);
+      case 'compaction_start':
+      case 'compaction_end':
+      case 'auto_retry_start':
+      case 'auto_retry_end':
+      case 'summarization_retry_scheduled':
+      case 'summarization_retry_attempt_start':
+      case 'summarization_retry_finished':
+        _appendTimelineEvent(event);
+        if (_lastEventType == 'compaction_end') {
+          unawaited(_refreshMessages());
+        }
       case 'extension_error':
         _lastError = event['error'] as String? ?? 'Pi extension error';
     }
@@ -105,6 +183,7 @@ class PiSessionProjection extends ChangeNotifier {
     final message = Map<String, dynamic>.from(rawMessage);
     if (message['role'] == 'assistant') {
       _streamingText = '';
+      _streamingThinking = '';
     }
   }
 
@@ -113,9 +192,44 @@ class PiSessionProjection extends ChangeNotifier {
       return;
     }
     final event = Map<String, dynamic>.from(rawEvent);
-    if (event['type'] == 'text_delta' && event['delta'] is String) {
-      _streamingText = '${_streamingText ?? ''}${event['delta']}';
+    switch (event['type']) {
+      case 'text_delta':
+        if (event['delta'] is String) {
+          _streamingText = '${_streamingText ?? ''}${event['delta']}';
+        }
+      case 'thinking_delta':
+        if (event['delta'] is String) {
+          _streamingThinking = '${_streamingThinking ?? ''}${event['delta']}';
+        }
     }
+  }
+
+  void _upsertToolEvent(PiJsonObject event) {
+    final toolCallId = event['toolCallId'];
+    if (toolCallId is! String) {
+      _appendTimelineEvent(event);
+      return;
+    }
+
+    final index = _toolEvents.indexWhere(
+      (item) => item['toolCallId'] == toolCallId,
+    );
+    final updated = List<PiJsonObject>.from(_toolEvents);
+    if (index < 0) {
+      updated.add(Map.unmodifiable(event));
+    } else {
+      updated[index] = Map.unmodifiable(event);
+    }
+    _toolEvents = updated.length > 40
+        ? updated.sublist(updated.length - 40)
+        : updated;
+  }
+
+  void _appendTimelineEvent(PiJsonObject event) {
+    final updated = <PiJsonObject>[..._timelineEvents, Map.unmodifiable(event)];
+    _timelineEvents = updated.length > 80
+        ? updated.sublist(updated.length - 80)
+        : updated;
   }
 
   Future<void> _refreshMessages() async {
@@ -166,6 +280,13 @@ class PiSessionProjection extends ChangeNotifier {
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList(growable: false);
+  }
+
+  List<String> _readStringList(Object? value) {
+    if (value is! List) {
+      return const <String>[];
+    }
+    return value.whereType<String>().toList(growable: false);
   }
 
   void _notify() {

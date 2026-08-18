@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:pi_desktop/pi_desktop.dart';
@@ -139,6 +140,7 @@ class _ContextBar extends StatelessWidget {
     final projection = connection.projection;
     final status = _statusData(context, connection.status);
     final model = _modelLabel(projection?.state);
+    final thinking = projection?.state?['thinkingLevel'] as String?;
 
     return Container(
       height: 58,
@@ -171,6 +173,10 @@ class _ContextBar extends StatelessWidget {
                   if (model != null) ...[
                     const SizedBox(width: 20),
                     _ContextValue(label: 'model', value: model),
+                  ],
+                  if (thinking != null) ...[
+                    const SizedBox(width: 20),
+                    _ContextValue(label: 'thinking', value: thinking),
                   ],
                 ],
               ),
@@ -294,25 +300,47 @@ class _TranscriptPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final messages = projection?.messages ?? const <PiJsonObject>[];
+    final toolEvents = projection?.toolEvents ?? const <PiJsonObject>[];
+    final timelineEvents = projection?.timelineEvents ?? const <PiJsonObject>[];
     final streamingText = projection?.streamingText;
+    final streamingThinking = projection?.streamingThinking;
+    final hasContent =
+        messages.isNotEmpty ||
+        toolEvents.isNotEmpty ||
+        timelineEvents.isNotEmpty ||
+        streamingText != null ||
+        streamingThinking != null;
 
     return _Pane(
       title: 'Transcript',
-      child: messages.isEmpty && streamingText == null
+      child: !hasContent
           ? _EmptyTranscript(connected: projection != null)
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(10, 4, 10, 24),
-              itemCount: messages.length + (streamingText == null ? 0 : 1),
+              itemCount:
+                  timelineEvents.length +
+                  toolEvents.length +
+                  messages.length +
+                  (streamingText == null && streamingThinking == null ? 0 : 1),
               separatorBuilder: (context, index) => const Divider(height: 28),
               itemBuilder: (context, index) {
-                if (index == messages.length) {
-                  return const _MessageDocument(
-                    roleLabel: 'assistant · streaming',
-                    text: '',
-                    streamingText: true,
-                  );
+                if (index < timelineEvents.length) {
+                  return _TimelineDocument(event: timelineEvents[index]);
                 }
-                return _MessageDocument.fromMessage(messages[index]);
+                final afterTimeline = index - timelineEvents.length;
+                if (afterTimeline < toolEvents.length) {
+                  return _ToolEventDocument(event: toolEvents[afterTimeline]);
+                }
+                final messageIndex = afterTimeline - toolEvents.length;
+                if (messageIndex < messages.length) {
+                  return _MessageDocument.fromMessage(messages[messageIndex]);
+                }
+                return _MessageDocument(
+                  roleLabel: 'assistant · streaming',
+                  text: streamingText ?? '',
+                  thinkingText: streamingThinking,
+                  streamingText: true,
+                );
               },
             ),
     );
@@ -365,16 +393,25 @@ class _MessageDocument extends StatelessWidget {
   const _MessageDocument({
     required this.roleLabel,
     required this.text,
+    this.thinkingText,
     this.streamingText = false,
   });
 
   factory _MessageDocument.fromMessage(PiJsonObject message) {
     final role = message['role'] as String? ?? 'message';
-    return _MessageDocument(roleLabel: role, text: _messageText(message));
+    final roleLabel = role == 'toolResult'
+        ? 'tool result · ${message['toolName'] ?? 'unknown'}'
+        : role;
+    return _MessageDocument(
+      roleLabel: roleLabel,
+      text: _messageText(message),
+      thinkingText: _thinkingText(message),
+    );
   }
 
   final String roleLabel;
   final String text;
+  final String? thinkingText;
   final bool streamingText;
 
   @override
@@ -402,24 +439,140 @@ class _MessageDocument extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          SelectableText(
-            shownText,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5),
-          ),
+          if (shownText.isNotEmpty)
+            SelectableText(
+              shownText,
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(height: 1.5),
+            ),
+          if (thinkingText != null && thinkingText!.isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: const Text('Thinking'),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelectableText(
+                    thinkingText!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-class _InspectorPane extends StatelessWidget {
+class _ToolEventDocument extends StatelessWidget {
+  const _ToolEventDocument({required this.event});
+
+  final PiJsonObject event;
+
+  @override
+  Widget build(BuildContext context) {
+    final toolName = event['toolName'] as String? ?? 'unknown';
+    final type = event['type'] as String? ?? 'tool_execution';
+    final isError = event['isError'] == true;
+    final payload = event['result'] ?? event['partialResult'];
+    final payloadText = _toolPayloadText(payload);
+    final color = isError
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '$type · $toolName'.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.1,
+            ),
+          ),
+          if (payloadText.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SelectableText(
+              payloadText,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: color, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineDocument extends StatelessWidget {
+  const _TimelineDocument({required this.event});
+
+  final PiJsonObject event;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = event['type'] as String? ?? 'Pi event';
+    final detail =
+        event['errorMessage'] ??
+        event['finalError'] ??
+        (event['result'] is Map ? (event['result'] as Map)['summary'] : null);
+    final text = detail is String ? '$type: $detail' : type;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+}
+
+class _InspectorPane extends StatefulWidget {
   const _InspectorPane({required this.connection});
 
   final PiDesktopConnection connection;
 
   @override
+  State<_InspectorPane> createState() => _InspectorPaneState();
+}
+
+class _InspectorPaneState extends State<_InspectorPane> {
+  String? _selectedEntryId;
+  String? _actionError;
+
+  PiDesktopConnection get _connection => widget.connection;
+
+  @override
   Widget build(BuildContext context) {
-    final projection = connection.projection;
+    final projection = _connection.projection;
+    final treeEntries = _flattenTree(projection?.tree?['tree']);
+    final currentModel = _currentModel(projection?.state);
+    final modelItems = projection?.availableModels ?? const <PiJsonObject>[];
+    final modelValues = modelItems
+        .where((model) => model['provider'] is String && model['id'] is String)
+        .map((model) => '${model['provider']}/${model['id']}')
+        .toSet();
+    final selectedModel = modelValues.contains(currentModel)
+        ? currentModel
+        : null;
+    final thinkingLevels = projection?.thinkingLevels ?? const <String>[];
+    final currentThinking = projection?.state?['thinkingLevel'] as String?;
+    final selectedThinking = thinkingLevels.contains(currentThinking)
+        ? currentThinking
+        : null;
+
     return _Pane(
       title: 'Inspector',
       child: ListView(
@@ -437,14 +590,276 @@ class _InspectorPane extends StatelessWidget {
             title: 'Messages',
             value: '${projection?.messages.length ?? 0}',
           ),
+          if (_actionError != null)
+            Text(
+              _actionError!,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: 8),
+          _InspectorSection(title: 'Model', value: ''),
+          if (modelItems.isEmpty)
+            const Text('Pi returned no available models.')
+          else
+            DropdownButton<String>(
+              isExpanded: true,
+              value: selectedModel,
+              hint: const Text('Select model'),
+              items: [
+                for (final model in modelItems)
+                  if (model['provider'] is String && model['id'] is String)
+                    DropdownMenuItem<String>(
+                      value: '${model['provider']}/${model['id']}',
+                      child: Text(
+                        '${model['provider']}/${model['id']}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+              ],
+              onChanged: _connection.isConnected
+                  ? (value) {
+                      if (value == null) return;
+                      final separator = value.indexOf('/');
+                      if (separator <= 0 || separator == value.length - 1) {
+                        return;
+                      }
+                      unawaited(
+                        _runAction(
+                          () => _connection.setModel(
+                            value.substring(0, separator),
+                            value.substring(separator + 1),
+                          ),
+                        ),
+                      );
+                    }
+                  : null,
+            ),
+          const SizedBox(height: 10),
+          _InspectorSection(title: 'Thinking level', value: ''),
+          if (thinkingLevels.isEmpty)
+            const Text('Pi returned no thinking levels.')
+          else
+            DropdownButton<String>(
+              isExpanded: true,
+              value: selectedThinking,
+              hint: const Text('Select thinking level'),
+              items: [
+                for (final level in thinkingLevels)
+                  DropdownMenuItem<String>(value: level, child: Text(level)),
+              ],
+              onChanged: _connection.isConnected
+                  ? (level) {
+                      if (level != null) {
+                        unawaited(
+                          _runAction(() => _connection.setThinkingLevel(level)),
+                        );
+                      }
+                    }
+                  : null,
+            ),
+          const SizedBox(height: 10),
           _InspectorSection(
-            title: 'Branch / Tool / Usage',
-            value: 'Available after Pi state is loaded',
+            title: 'Queue',
+            value:
+                'steer ${projection?.steeringQueue.length ?? 0} · follow-up ${projection?.followUpQueue.length ?? 0}',
           ),
+          if (treeEntries.isNotEmpty) ...[
+            _InspectorSection(title: 'Session tree', value: ''),
+            for (final item in treeEntries)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                selected: _selectedEntryId == item.id,
+                title: Text(item.id),
+                subtitle: Text(
+                  '${item.role} · parent ${item.parentId ?? 'root'}${item.label == null ? '' : ' · ${item.label}'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => setState(() => _selectedEntryId = item.id),
+                trailing: IconButton(
+                  tooltip: 'Fork from this Pi Entry',
+                  onPressed: _connection.isConnected
+                      ? () => unawaited(
+                          _runAction(() => _connection.fork(item.id)),
+                        )
+                      : null,
+                  icon: const Icon(Icons.call_split_outlined, size: 18),
+                ),
+              ),
+          ],
+          const SizedBox(height: 8),
+          _InspectorSection(title: 'Actions', value: 'Pi commands'),
+          Wrap(
+            spacing: 2,
+            children: [
+              IconButton(
+                tooltip: 'New Pi Session',
+                onPressed: _connection.isConnected
+                    ? () => unawaited(_runAction(_connection.newSession))
+                    : null,
+                icon: const Icon(Icons.note_add_outlined),
+              ),
+              IconButton(
+                tooltip: 'Switch Pi Session',
+                onPressed: _connection.isConnected
+                    ? () => unawaited(_switchSession(context))
+                    : null,
+                icon: const Icon(Icons.folder_open_outlined),
+              ),
+              IconButton(
+                tooltip: 'Clone Pi Session',
+                onPressed: _connection.isConnected
+                    ? () => unawaited(_runAction(_connection.clone))
+                    : null,
+                icon: const Icon(Icons.copy_outlined),
+              ),
+              IconButton(
+                tooltip: 'Compact through Pi',
+                onPressed: _connection.isConnected
+                    ? () => unawaited(_runAction(() => _connection.compact()))
+                    : null,
+                icon: const Icon(Icons.compress_outlined),
+              ),
+              IconButton(
+                tooltip: 'Export Pi Session',
+                onPressed: _connection.isConnected
+                    ? () =>
+                          unawaited(_runAction(() => _connection.exportHtml()))
+                    : null,
+                icon: const Icon(Icons.ios_share_outlined),
+              ),
+            ],
+          ),
+          if (projection?.sessionStats != null)
+            _InspectorSection(
+              title: 'Usage',
+              value: _usageLabel(projection!.sessionStats!),
+            ),
         ],
       ),
     );
   }
+
+  Future<void> _switchSession(BuildContext context) async {
+    final controller = TextEditingController();
+    final path = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Switch Pi Session'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Session JSONL path'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Switch'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (path == null || path.trim().isEmpty) {
+      return;
+    }
+    await _runAction(() => _connection.switchSession(path.trim()));
+  }
+
+  Future<void> _runAction(Future<PiRpcResponse> Function() action) async {
+    try {
+      final response = await action();
+      if (!response.success && mounted) {
+        setState(() => _actionError = response.error ?? 'Pi command failed');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _actionError = error.toString());
+      }
+    }
+  }
+}
+
+class _TreeItem {
+  const _TreeItem({
+    required this.id,
+    required this.parentId,
+    required this.role,
+    required this.label,
+  });
+
+  final String id;
+  final String? parentId;
+  final String role;
+  final String? label;
+}
+
+List<_TreeItem> _flattenTree(Object? value) {
+  if (value is! List) {
+    return const <_TreeItem>[];
+  }
+
+  final result = <_TreeItem>[];
+  void visit(Object? rawNode) {
+    if (rawNode is! Map) {
+      return;
+    }
+    final node = Map<String, dynamic>.from(rawNode);
+    final rawEntry = node['entry'];
+    if (rawEntry is Map) {
+      final entry = Map<String, dynamic>.from(rawEntry);
+      final id = entry['id'];
+      if (id is String) {
+        final message = entry['message'];
+        result.add(
+          _TreeItem(
+            id: id,
+            parentId: entry['parentId'] as String?,
+            role: message is Map && message['role'] is String
+                ? message['role'] as String
+                : entry['type'] as String? ?? 'entry',
+            label: node['label'] as String?,
+          ),
+        );
+      }
+    }
+    final children = node['children'];
+    if (children is List) {
+      for (final child in children) {
+        visit(child);
+      }
+    }
+  }
+
+  for (final node in value) {
+    visit(node);
+  }
+  return result;
+}
+
+String? _currentModel(PiJsonObject? state) {
+  final model = state?['model'];
+  if (model is! Map || model['provider'] is! String || model['id'] is! String) {
+    return null;
+  }
+  return '${model['provider']}/${model['id']}';
+}
+
+String _usageLabel(PiJsonObject stats) {
+  final contextUsage = stats['contextUsage'];
+  if (contextUsage is Map && contextUsage['percent'] is num) {
+    return '${contextUsage['percent']}% context';
+  }
+  final tokens = stats['tokens'];
+  if (tokens is Map && tokens['total'] is num) {
+    return '${tokens['total']} tokens';
+  }
+  return 'Pi usage available';
 }
 
 class _InspectorSection extends StatelessWidget {
@@ -737,10 +1152,55 @@ String _messageText(PiJsonObject message) {
         if (block['text'] is String) {
           parts.add(block['text'] as String);
         }
+      case 'image':
+        parts.add('[image content from Pi]');
       case 'toolCall':
         final name = block['name'];
-        parts.add('Tool call: ${name is String ? name : 'unknown'}');
+        final arguments = block['arguments'];
+        final argumentText = arguments == null
+            ? ''
+            : '${String.fromCharCode(10)}${jsonEncode(arguments)}';
+        parts.add(
+          'Tool call: ${name is String ? name : 'unknown'}$argumentText',
+        );
     }
   }
+
+  final details = message['details'];
+  if (details is Map && details['diff'] is String) {
+    parts.add('Diff:\n${details['diff']}');
+  }
   return parts.join('\n\n');
+}
+
+String? _thinkingText(PiJsonObject message) {
+  final content = message['content'];
+  if (content is! List) {
+    return null;
+  }
+  final parts = <String>[];
+  for (final block in content.whereType<Map>()) {
+    if (block['type'] == 'thinking' && block['thinking'] is String) {
+      parts.add(block['thinking'] as String);
+    }
+  }
+  return parts.isEmpty ? null : parts.join('\n');
+}
+
+String _toolPayloadText(Object? payload) {
+  if (payload is! Map) {
+    return payload is String ? payload : '';
+  }
+  final content = payload['content'];
+  if (content is List) {
+    final text = content
+        .whereType<Map>()
+        .where((item) => item['type'] == 'text' && item['text'] is String)
+        .map((item) => item['text'] as String)
+        .join('\n');
+    if (text.isNotEmpty) {
+      return text;
+    }
+  }
+  return jsonEncode(payload);
 }
