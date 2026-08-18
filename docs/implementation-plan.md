@@ -67,7 +67,7 @@
 
 ## M3：Pi 原生扩展兼容（Extension UI 已接入）
 
-- [ ] Slash Command 建议直接来自 `get_commands`。
+- [x] Slash Command 建议直接来自 Pi `get_commands`，发送仍交给 Pi 的原生 Prompt expansion。
 - [ ] 展示 Pi 原生 Extension、Skill、Prompt、Theme 的来源、路径和错误。
 - [x] 实现 `select`、`confirm`、`input`、`editor` 的请求/响应。
 - [x] 展示 `notify`、`setStatus`、`setWidget`、`setTitle`、`set_editor_text`。

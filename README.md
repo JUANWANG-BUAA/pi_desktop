@@ -9,7 +9,7 @@ Pi Desktop 是 Pi 核心的 Flutter Desktop 原生客户端。它通过官方 `p
 - M1.2：Pi RPC Transport、严格 JSONL framing、响应关联和生命周期测试已完成。
 - M1.3：Session 状态恢复、Transcript 流式投影、Prompt、Steer、Follow-up、Abort 和显式重启已完成。
 - M2：Tool/Thinking/Queue/Compaction/Retry/Tree/Model/Session 控件已接入；真实 Provider 行为矩阵待带凭据的 Pi Session 回归。
-- M3：Pi Extension UI 请求/响应和状态展示已接入；Slash Command/资源诊断待继续完成。
+- M3：Pi Extension UI 请求/响应、状态展示和基于 `get_commands` 的 Slash Command 建议已接入；资源诊断待继续完成。
 - 本地环境：已固定 Flutter 3.47.0 / Dart 3.13.0、Node.js 24.19.0 和 Pi 0.84.2。
 
 ## 边界

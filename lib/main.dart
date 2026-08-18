@@ -801,6 +801,20 @@ class _InspectorPaneState extends State<_InspectorPane> {
             value:
                 'steer ${projection?.steeringQueue.length ?? 0} · follow-up ${projection?.followUpQueue.length ?? 0}',
           ),
+          if (projection?.commands.isNotEmpty == true) ...[
+            _InspectorSection(title: 'Pi commands', value: ''),
+            for (final command in projection!.commands.take(8))
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('/${command['name'] ?? 'unknown'}'),
+                subtitle: Text(
+                  '${command['source'] ?? 'Pi'} · ${command['path'] ?? 'source unavailable'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
           if (treeEntries.isNotEmpty) ...[
             _InspectorSection(title: 'Session tree', value: ''),
             for (final item in treeEntries)
@@ -1072,6 +1086,7 @@ class _PromptBar extends StatefulWidget {
 
 class _PromptBarState extends State<_PromptBar> {
   final _textController = TextEditingController();
+  final _focusNode = FocusNode();
   String? _error;
   String? _appliedExtensionText;
 
@@ -1080,6 +1095,7 @@ class _PromptBarState extends State<_PromptBar> {
   @override
   void dispose() {
     _textController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -1092,6 +1108,10 @@ class _PromptBarState extends State<_PromptBar> {
         .toList(growable: false);
     final statusText = _connection.extensionStatuses.values.join(' · ');
     final extensionText = _connection.extensionEditorText;
+    final commandSuggestions = _commandSuggestions(
+      _textController.text,
+      _connection.projection?.commands ?? const <PiJsonObject>[],
+    );
     if (extensionText != null && extensionText != _appliedExtensionText) {
       _appliedExtensionText = extensionText;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1139,7 +1159,9 @@ class _PromptBarState extends State<_PromptBar> {
               Expanded(
                 child: TextField(
                   controller: _textController,
+                  focusNode: _focusNode,
                   enabled: enabled,
+                  onChanged: (_) => setState(() {}),
                   minLines: 1,
                   maxLines: 4,
                   decoration: InputDecoration(
@@ -1175,6 +1197,25 @@ class _PromptBarState extends State<_PromptBar> {
                 ),
             ],
           ),
+          if (commandSuggestions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  for (final command in commandSuggestions)
+                    ActionChip(
+                      label: Text('/${command['name']}'),
+                      onPressed: () {
+                        _textController.text = '/${command['name']} ';
+                        _focusNode.requestFocus();
+                        setState(() {});
+                      },
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1207,6 +1248,23 @@ class _PromptBarState extends State<_PromptBar> {
       }
     }
   }
+}
+
+List<PiJsonObject> _commandSuggestions(
+  String text,
+  List<PiJsonObject> commands,
+) {
+  if (!text.startsWith('/')) {
+    return const <PiJsonObject>[];
+  }
+  final query = text.substring(1).split(' ').first.toLowerCase();
+  return commands
+      .where((command) {
+        final name = command['name'];
+        return name is String && name.toLowerCase().startsWith(query);
+      })
+      .take(6)
+      .toList(growable: false);
 }
 
 class _StatusData {
