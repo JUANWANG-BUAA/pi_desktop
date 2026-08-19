@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../rpc/pi_rpc_client.dart';
+import 'pi_baseline.dart';
 import 'pi_session_projection.dart';
 
 enum PiConnectionStatus {
@@ -46,6 +47,8 @@ class PiDesktopConnection extends ChangeNotifier {
   PiSessionProjection? _projection;
   StreamSubscription<PiJsonObject>? _extensionUiSubscription;
   StreamSubscription<String>? _stderrSubscription;
+  String? _resolvedExecutable;
+  String? _runtimeVersion;
   final StreamController<PiJsonObject> _extensionUiRequests =
       StreamController<PiJsonObject>.broadcast();
   final Map<String, String> _extensionStatuses = <String, String>{};
@@ -93,6 +96,12 @@ class PiDesktopConnection extends ChangeNotifier {
   Map<String, List<String>> get extensionWidgets =>
       Map.unmodifiable(_extensionWidgets);
   List<String> get stderrLines => List.unmodifiable(_stderrLines);
+
+  /// Absolute or PATH name actually spawned after `PI_DESKTOP_RUNTIME`.
+  String get runtimeExecutable => _resolvedExecutable ?? executable;
+
+  /// `pi --version` of [runtimeExecutable], set after a successful gate.
+  String? get runtimeVersion => _runtimeVersion;
   String? get extensionTitle => _extensionTitle;
   String? get extensionEditorText => _extensionEditorText;
 
@@ -109,10 +118,17 @@ class PiDesktopConnection extends ChangeNotifier {
     _errorMessage = null;
     _resetExtensionUiState();
     _stderrLines.clear();
+    _runtimeVersion = null;
 
     try {
+      final resolved = PiRuntime.resolveExecutable(executable);
+      _resolvedExecutable = resolved;
+      PiRuntime.enforceBaseline(resolved);
+      _runtimeVersion = PiRuntime.shouldEnforceBaseline(resolved)
+          ? piBaselineVersion
+          : PiRuntime.readVersion(resolved);
       final client = await PiRpcClient.start(
-        executable: executable,
+        executable: resolved,
         arguments: arguments,
         workingDirectory: workingDirectory,
         environment: environment,
@@ -457,8 +473,8 @@ class PiDesktopConnection extends ChangeNotifier {
       }
       _stderrLines.add(trimmed);
     }
-    if (_stderrLines.length > 40) {
-      _stderrLines.removeRange(0, _stderrLines.length - 40);
+    if (_stderrLines.length > 400) {
+      _stderrLines.removeRange(0, _stderrLines.length - 400);
     }
     _stderrNotifyTimer ??= Timer(const Duration(milliseconds: 120), () {
       _stderrNotifyTimer = null;
@@ -501,14 +517,56 @@ class PiDesktopConnection extends ChangeNotifier {
     }
 
     await _tearDownClient();
-    _errorMessage = exit.exitCode == 0
-        ? null
-        : 'Pi RPC exited with code ${exit.exitCode}.';
-    _setStatus(
-      exit.exitCode == 0
-          ? PiConnectionStatus.disconnected
-          : PiConnectionStatus.crashed,
-    );
+    if (exit.exitCode == 0) {
+      _errorMessage = null;
+      _setStatus(PiConnectionStatus.disconnected);
+      return;
+    }
+    final tail = _stderrTail(24);
+    _errorMessage = tail.isEmpty
+        ? 'Pi RPC exited with code ${exit.exitCode}.'
+        : 'Pi RPC exited with code ${exit.exitCode}.\n$tail';
+    await _persistCrashLog(exit.exitCode, tail);
+    _setStatus(PiConnectionStatus.crashed);
+  }
+
+  String _stderrTail(int maxLines) {
+    if (_stderrLines.isEmpty) {
+      return '';
+    }
+    final start = _stderrLines.length > maxLines
+        ? _stderrLines.length - maxLines
+        : 0;
+    return _stderrLines.sublist(start).join('\n');
+  }
+
+  Future<void> _persistCrashLog(int exitCode, String tail) async {
+    try {
+      final file = await _crashLogFile();
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        'exitCode: $exitCode\n'
+        'executable: $runtimeExecutable\n'
+        'version: ${_runtimeVersion ?? 'unknown'}\n'
+        'cwd: $workingDirectory\n'
+        '\n$tail\n',
+      );
+    } on Object {
+      // Crash persistence is diagnostic-only and must not affect Pi.
+    }
+  }
+
+  Future<File> _crashLogFile() async {
+    final home = Platform.environment['HOME'] ?? Directory.systemTemp.path;
+    if (Platform.isMacOS) {
+      return File('$home/Library/Logs/Pi Desktop/last_pi_crash.log');
+    }
+    if (Platform.isWindows) {
+      final appData =
+          Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+      return File('$appData\\Pi Desktop\\last_pi_crash.log');
+    }
+    return File('$home/.local/share/pi-desktop/last_pi_crash.log');
   }
 
   void _bindProjection(PiSessionProjection projection) {

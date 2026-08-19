@@ -123,6 +123,7 @@ void main() {
         'lib/src/rpc/pi_rpc_client.dart', // spawns the official Pi subprocess
         'lib/src/session/pi_desktop_connection.dart', // launch dir, stderr
         'lib/src/session/pi_installation.dart', // explicit Pi CLI setup
+        'lib/src/session/pi_baseline.dart', // version gate for spawned Pi
         'lib/src/ui/ui_preferences.dart', // pure UI preferences persistence
         'lib/src/ui/workspace_io.dart', // workspace path helpers
         'lib/src/ui/workspace_file_catalog.dart', // workspace file listing

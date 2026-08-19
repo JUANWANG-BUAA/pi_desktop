@@ -18,10 +18,6 @@ Future<List<XFile>> pickImageFiles() {
   );
 }
 
-Future<List<XFile>> pickAnyFiles() {
-  return openFiles();
-}
-
 Future<void> chooseWorkspace({
   required PiDesktopConnection connection,
   required UiPreferences preferences,

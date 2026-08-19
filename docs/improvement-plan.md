@@ -58,3 +58,17 @@
 
 - url_launcher / WebView / 任何 Provider 直连（边界扫描会拦截）。
 - 自动重试/自动继续编排（合同禁止；Retry 只展示 Pi 事件与转发官方命令）。
+- 在官方 RPC 落地前发明 `list_sessions` / `list_resources` / `files` 命令（TODO.md §3.2）。
+
+## S6 Direction A：把缺口推回官方 RPC（进行中）
+
+产品选择补协议、收回豁免，而不是收缩「可视化入口」定位。规格见 [`docs/rpc-upstream.md`](rpc-upstream.md)。
+
+- [x] 连接时对名为 `pi` 的进程强制 `docs/pi-baseline.md` 版本门禁；`PI_DESKTOP_RUNTIME` 可指向已验证二进制。
+- [x] 撤回 prompt 里的 `@path` 文本拼贴；图片仍走官方 `ImageContent`。
+- [x] Pi crash 保留 stderr（400 行）并写入 `last_pi_crash.log`。
+- [x] Archive / 资源清单在 UI 上标明「等待官方 list_*」。
+- [ ] 上游落地 `list_sessions` 后删除 JSONL 标题刮取。
+- [ ] 上游落地 `list_resources` 后删除 `~/.pi` 递归清点。
+- [ ] 上游落地 `files` 后按官方字段发非图片附件。
+- [ ] M5：发行版携带验证过的 Pi 运行时，不再依赖全局 npm `pi`。

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../rpc/pi_rpc_client.dart';
+import '../session/pi_baseline.dart';
 import '../session/pi_desktop_connection.dart';
 import '../session/pi_session_projection.dart';
 import 'content_format.dart';
@@ -41,7 +42,6 @@ class PromptBar extends StatefulWidget {
 class PromptBarState extends State<PromptBar> {
   TextEditingController? _localController;
   final _images = <_DraftImage>[];
-  final _files = <_DraftFile>[];
   String? _error;
   String? _appliedExtensionText;
 
@@ -215,53 +215,17 @@ class PromptBarState extends State<PromptBar> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_images.isNotEmpty || _files.isNotEmpty)
+                if (_images.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (var i = 0; i < _images.length; i++)
-                              _ImageAttachmentCard(
-                                image: _images[i],
-                                onRemove: () =>
-                                    setState(() => _images.removeAt(i)),
-                              ),
-                            for (var i = 0; i < _files.length; i++)
-                              Tooltip(
-                                message: _files[i].path,
-                                child: InputChip(
-                                  avatar: const Icon(
-                                    Icons.link_outlined,
-                                    size: 15,
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                  label: Text(
-                                    _files[i].label,
-                                    style: tokens.control.copyWith(
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  onDeleted: () =>
-                                      setState(() => _files.removeAt(i)),
-                                ),
-                              ),
-                          ],
-                        ),
-                        if (_files.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 5),
-                            child: Text(
-                              'Files are sent as Pi-readable path references.',
-                              style: tokens.control.copyWith(
-                                color: tokens.textFaint,
-                                fontSize: 11,
-                              ),
-                            ),
+                        for (var i = 0; i < _images.length; i++)
+                          _ImageAttachmentCard(
+                            image: _images[i],
+                            onRemove: () => setState(() => _images.removeAt(i)),
                           ),
                       ],
                     ),
@@ -275,7 +239,7 @@ class PromptBarState extends State<PromptBar> {
                   maxLines: 8,
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
-                  style: tokens.control.copyWith(height: 1.45),
+                  style: tokens.reading.copyWith(height: 1.45),
                   decoration: InputDecoration(
                     filled: false,
                     hintText: hint,
@@ -290,7 +254,10 @@ class PromptBarState extends State<PromptBar> {
                     _AttachMenu(
                       tokens: tokens,
                       onImages: () => unawaited(_attachImages()),
-                      onFiles: () => unawaited(_attachFiles()),
+                      onFilesUnavailable: () => setState(
+                        () => _error =
+                            'Pi $piBaselineVersion RPC has no file-attachment command. Images use official ImageContent. Other files wait on the upstream `files` field — see docs/rpc-upstream.md.',
+                      ),
                       onWorkspace: () => unawaited(_chooseWorkspace()),
                     ),
                     if (modelValues.isNotEmpty) ...[
@@ -540,66 +507,25 @@ class PromptBarState extends State<PromptBar> {
     }
   }
 
-  Future<void> _attachFiles() async {
-    try {
-      final files = await pickAnyFiles();
-      if (files.isEmpty) {
-        return;
-      }
-      final added = <_DraftFile>[];
-      for (final file in files) {
-        final path = file.path;
-        if (path.isNotEmpty) {
-          added.add(_DraftFile(path: path, label: file.name));
-        }
-      }
-      if (added.isEmpty) {
-        return;
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _files.addAll(added);
-        _error = null;
-      });
-      widget.focusNode.requestFocus();
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
-      }
-    }
-  }
-
   Future<void> _submit(
     Future<PiRpcResponse> Function(String message, {List<PiJsonObject> images})
     send,
   ) async {
     final draftText = _textController.text;
     final draftImages = List<_DraftImage>.of(_images);
-    final draftFiles = List<_DraftFile>.of(_files);
     final message = draftText.trim();
-    if (message.isEmpty && _images.isEmpty && _files.isEmpty) {
+    if (message.isEmpty && _images.isEmpty) {
       return;
     }
 
     final images = [for (final image in _images) image.content];
-    final fileContext = _files
-        .map((file) => '@${_quoteFilePath(file.path)}')
-        .join(' ');
-    final outgoing = message.isEmpty
-        ? fileContext
-        : fileContext.isEmpty
-        ? message
-        : '$message\n\nAttached files: $fileContext';
     _textController.clear();
     setState(() {
       _images.clear();
-      _files.clear();
       _error = null;
     });
     try {
-      final response = await send(outgoing, images: images);
+      final response = await send(message, images: images);
       if (!response.success) {
         // Pi rejected the message (for example a `prompt` racing the
         // stream). Surface the reason and hand the draft back instead of
@@ -618,9 +544,6 @@ class PromptBarState extends State<PromptBar> {
           }
           if (_images.isEmpty) {
             _images.addAll(draftImages);
-          }
-          if (_files.isEmpty) {
-            _files.addAll(draftFiles);
           }
           _error = error.toString();
         });
@@ -788,36 +711,17 @@ class _ImageAttachmentCard extends StatelessWidget {
   }
 }
 
-class _DraftFile {
-  const _DraftFile({required this.path, required this.label});
-
-  final String path;
-  final String label;
-}
-
-String _quoteFilePath(String path) {
-  final needsQuotes =
-      path.contains(' ') ||
-      path.contains('\t') ||
-      path.contains('"') ||
-      path.contains("'");
-  if (!needsQuotes) {
-    return path;
-  }
-  return '"${path.replaceAll('"', '\\"')}"';
-}
-
 class _AttachMenu extends StatelessWidget {
   const _AttachMenu({
     required this.tokens,
     required this.onImages,
-    required this.onFiles,
+    required this.onFilesUnavailable,
     required this.onWorkspace,
   });
 
   final PiTokens tokens;
   final VoidCallback onImages;
-  final VoidCallback onFiles;
+  final VoidCallback onFilesUnavailable;
   final VoidCallback onWorkspace;
 
   @override
@@ -838,8 +742,8 @@ class _AttachMenu extends StatelessWidget {
           child: Text('Attach images', style: tokens.control),
         ),
         MenuItemButton(
-          onPressed: onFiles,
-          child: Text('Reference files in prompt', style: tokens.control),
+          onPressed: onFilesUnavailable,
+          child: Text('Attach files (needs Pi RPC)', style: tokens.control),
         ),
         MenuItemButton(
           onPressed: onWorkspace,

@@ -63,21 +63,17 @@ once per clone.
   user-authenticated Pi Session. They are not run automatically to avoid consuming
   model quota or mutating a user Session.
 - Windows and Linux native builds require the corresponding host or CI runner.
-- Pi `0.84.2` RPC does not expose one unified resource-diagnostics command for all
-  Extension, Skill, Prompt and Theme resources, and does not expose a session
-  listing command. To render the Archive/Inspector the client performs two
-  read-only filesystem operations: it lists Pi's session directory and reads
-  the first bytes of each Session JSONL for a title preview
-  (`lib/src/ui/pi_session_catalog.dart`), and it inventories
-  `~/.pi/agent` skill/extension metadata (`lib/src/ui/pi_resource_catalog.dart`).
-  Neither writes, copies, nor parses full session content, and switching still
-  happens only through `switch_session`. This is a documented deviation from
-  the strictest reading of "不直接读写 Session JSONL / 不扫描私有目录" and stays
-  open pending an official Pi RPC for session listing and resource diagnostics.
-- File attachments are sent as Pi-readable `@path` references composed into the
-  prompt text (`prompt_bar.dart`). The added framing text is desktop-authored;
-  it is visible in the composer and not hidden, but it is not an official Pi
-  ImageContent path. Treat it as an open contract question for a future Pi RPC.
+- Pi `0.84.2` RPC still lacks `list_sessions`, `list_resources`, in-band `files`,
+  and `get_runtime_info`. Direction A is to get those from Pi rather than grow
+  desktop exemptions; the request is [`rpc-upstream.md`](rpc-upstream.md).
+  Until they ship, Archive/Inspector keep a labelled read-only filesystem
+  preview (`pi_session_catalog.dart`, `pi_resource_catalog.dart`). Switching
+  still happens only through `switch_session`. Images use official
+  `ImageContent`. Non-image files are no longer spliced into the prompt as
+  `@path`. A binary named `pi` is refused unless `pi --version` matches the
+  pinned baseline (`PI_DESKTOP_RUNTIME` may point at a verified binary). After
+  a crash the desktop keeps Pi stderr (up to 400 lines), shows the last 24 in
+  the connection error, and writes `last_pi_crash.log`.
 - Packaging a verified Pi runtime, signing, upgrade and uninstall checks belong to M5.
 
 ## Manual launch

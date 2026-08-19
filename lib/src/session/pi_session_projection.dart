@@ -344,11 +344,13 @@ class PiSessionProjection extends ChangeNotifier {
         unawaited(_refreshMessages());
       case 'tool_execution_start':
         _upsertToolEvent(event);
+        kind = _NotifyKind.stream;
       case 'tool_execution_update':
         _upsertToolEvent(event);
         kind = _NotifyKind.stream;
       case 'tool_execution_end':
         _upsertToolEvent(event);
+        kind = _NotifyKind.stream;
       case 'bash_execution_update':
         final delta = event['delta'];
         if (delta is String) {
@@ -431,6 +433,7 @@ class PiSessionProjection extends ChangeNotifier {
     _toolEvents = updated.length > 40
         ? updated.sublist(updated.length - 40)
         : updated;
+    _documentsCache = null;
   }
 
   void _appendTimelineEvent(PiJsonObject event) {

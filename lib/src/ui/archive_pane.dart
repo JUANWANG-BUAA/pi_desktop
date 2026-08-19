@@ -148,6 +148,16 @@ class _ArchivePaneState extends State<ArchivePane> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 12, 6),
+            child: Text(
+              'Filesystem preview until Pi list_sessions exists.',
+              style: tokens.control.copyWith(
+                color: tokens.textFaint,
+                fontSize: 11,
+              ),
+            ),
+          ),
           Expanded(
             child: FutureBuilder<List<PiSessionSummary>>(
               future: _sessions,
@@ -528,7 +538,7 @@ class _ArchivePaneState extends State<ArchivePane> {
       builder: (context) => AlertDialog(
         title: Text('$verb Pi'),
         content: const Text(
-          'This runs the official command:\n\nnpm install --global --ignore-scripts @earendil-works/pi-coding-agent\n\nIt changes your global npm installation. Pi Desktop will not install extensions or start an additional agent.',
+          'Development only. This runs:\n\nnpm install --global --ignore-scripts @earendil-works/pi-coding-agent\n\nThe release product must ship a verified Pi runtime (TODO.md §12). After install, Pi Desktop still refuses any version other than the pinned RPC baseline.',
         ),
         actions: [
           TextButton(

@@ -181,6 +181,14 @@ class _InspectorStatusStrip extends StatelessWidget {
           const SizedBox(width: 7),
           Text(label, style: tokens.micro.copyWith(color: tokens.textSoft)),
           const Spacer(),
+          if (connection.runtimeVersion != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Text(
+                'pi ${connection.runtimeVersion}',
+                style: tokens.micro.copyWith(color: tokens.textFaint),
+              ),
+            ),
           if (percent != null)
             Text(
               'context ${percent.round()}%',
@@ -488,6 +496,16 @@ class _CapabilitiesTabState extends State<_CapabilitiesTab> {
               icon: const Icon(Icons.refresh_outlined, size: 16),
             ),
           ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Local preview until Pi list_resources exists. Slash commands already come from get_commands.',
+            style: tokens.control.copyWith(
+              color: tokens.textFaint,
+              fontSize: 11.5,
+            ),
+          ),
         ),
         FutureBuilder<PiResourceSnapshot>(
           future: _catalog,
@@ -1205,7 +1223,7 @@ class _PreviewTab extends StatelessWidget {
             borderRadius: BorderRadius.circular(tokens.chipRadius),
             border: Border.all(color: tokens.line),
           ),
-          child: MarkdownDocument(text: text, serif: true),
+          child: MarkdownDocument(text: text),
         ),
       ],
     );
