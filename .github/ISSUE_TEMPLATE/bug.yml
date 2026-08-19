@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in Pi Desktop is wrong (not a Pi CLI protocol bug).
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If `pi` itself misbehaves over RPC, file it on
+        [earendil-works/pi](https://github.com/earendil-works/pi) instead.
+        Do not paste API keys or Session JSONL.
+  - type: input
+    id: desktop-version
+    attributes:
+      label: Pi Desktop version
+      description: Commit SHA or tag.
+    validations:
+      required: true
+  - type: input
+    id: pi-version
+    attributes:
+      label: Pi version
+      placeholder: '0.84.2'
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [macOS, Windows, Linux]
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Expected vs actual, and steps to reproduce.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Redact secrets. Pi crash text from `last_pi_crash.log` is OK.
+      render: text

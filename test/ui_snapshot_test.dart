@@ -25,7 +25,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/shell_dark.png'),
     );
-  });
+  }, tags: ['golden']);
 
   testWidgets('light shell golden', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 820));
@@ -48,5 +48,5 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/shell_light.png'),
     );
-  });
+  }, tags: ['golden']);
 }

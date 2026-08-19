@@ -1,8 +1,11 @@
 name: pi_desktop
 description: "A native Flutter Desktop client for Pi."
 publish_to: 'none'
-
 version: 0.1.0+1
+homepage: https://github.com/JUANWANG-BUAA/pi_desktop
+repository: https://github.com/JUANWANG-BUAA/pi_desktop
+issue_tracker: https://github.com/JUANWANG-BUAA/pi_desktop/issues
+license: MIT
 
 environment:
   sdk: '>=3.13.0 <4.0.0'

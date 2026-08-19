@@ -1,0 +1,31 @@
+name: Feature request
+description: Ask for a desktop display or RPC-forwarding change.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pi Desktop only displays Pi state and forwards official RPC. Requests
+        that need a new command should start from
+        [docs/rpc-upstream.md](https://github.com/JUANWANG-BUAA/pi_desktop/blob/main/docs/rpc-upstream.md)
+        and an upstream Pi issue — this client will not invent commands.
+  - type: textarea
+    id: need
+    attributes:
+      label: What should the desktop show or forward?
+    validations:
+      required: true
+  - type: textarea
+    id: rpc
+    attributes:
+      label: Official Pi RPC involved
+      description: Command names from Pi `docs/rpc.md`, or "none / needs upstream".
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Boundary
+      options:
+        - label: This is not a second agent, session database, provider gateway, or plugin API.
+          required: true

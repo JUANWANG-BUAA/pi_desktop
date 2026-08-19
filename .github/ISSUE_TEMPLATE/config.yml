@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Pi coding agent (upstream)
+    url: https://github.com/earendil-works/pi/issues
+    about: Bugs in `pi --mode rpc` itself belong in the Pi repository, not here.
+  - name: Contributing guide
+    url: https://github.com/JUANWANG-BUAA/pi_desktop/blob/main/CONTRIBUTING.md
+    about: How to run the client locally and what the commit gate expects.
