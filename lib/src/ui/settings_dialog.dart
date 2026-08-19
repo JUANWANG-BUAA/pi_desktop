@@ -61,14 +61,13 @@ class SettingsDialog extends StatelessWidget {
                           },
                           onSelected: preferences.setThemeMode,
                         ),
-                        _ChoiceRow<PiReadingFont>(
-                          label: 'Reading font',
-                          value: preferences.readingFont,
-                          choices: const {
-                            PiReadingFont.sans: 'Sans',
-                            PiReadingFont.serif: 'Serif',
-                          },
-                          onSelected: preferences.setReadingFont,
+                        _FontFamilyPicker(preferences: preferences),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12, top: 4),
+                          child: Text(
+                            'The five boxing wizards jump quickly. 中文阅读效果。',
+                            style: tokens.reading.copyWith(fontSize: 16),
+                          ),
                         ),
                         _ChoiceRow<PiDensity>(
                           label: 'Spacing',
@@ -108,7 +107,7 @@ class SettingsDialog extends StatelessWidget {
                               preferences.setTextScale(value, persist: true),
                         ),
                         Text(
-                          'Applies to conversation reading and interface controls. Code remains monospaced.',
+                          'Applies to conversation, controls, and the composer. Code blocks stay monospaced unless Mono is selected.',
                           style: tokens.control.copyWith(
                             color: tokens.textFaint,
                             fontSize: 12,
@@ -217,6 +216,54 @@ class SettingsDialog extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _FontFamilyPicker extends StatelessWidget {
+  const _FontFamilyPicker({required this.preferences});
+
+  final UiPreferences preferences;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = PiTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Interface font', style: tokens.control),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final font in PiReadingFont.values)
+                ChoiceChip(
+                  label: Text(font.label),
+                  selected: preferences.readingFont == font,
+                  onSelected: (_) =>
+                      unawaited(preferences.setReadingFont(font)),
+                  showCheckmark: false,
+                  visualDensity: VisualDensity.compact,
+                  labelStyle: tokens.control.copyWith(
+                    fontSize: 12.5,
+                    color: preferences.readingFont == font
+                        ? tokens.text
+                        : tokens.textSoft,
+                  ),
+                  selectedColor: tokens.panelSoft,
+                  side: BorderSide(
+                    color: preferences.readingFont == font
+                        ? tokens.accent.withValues(alpha: 0.45)
+                        : tokens.line,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

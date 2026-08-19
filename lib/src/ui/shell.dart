@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -328,92 +327,93 @@ class _ShellLayoutState extends State<_ShellLayout>
                       ),
                     ),
                     Expanded(
-                      child: Stack(
+                      child: Column(
                         children: [
-                          // Keep the quiet Claude-like motion present after a
-                          // session begins as well. It is deliberately below
-                          // every interactive surface and repaint-isolated.
-                          const Positioned.fill(
-                            child: IgnorePointer(
-                              child: Opacity(
-                                opacity: 0.48,
-                                child: _DotField(intensity: 0.72, spacing: 12),
-                              ),
-                            ),
+                          const SizedBox(height: 28),
+                          BoundConnection(
+                            connection: _connection,
+                            select: (connection, projection) =>
+                                '${connection.status}|${projection?.chromeEpoch}|${connection.extensionTitle}|${connection.errorMessage}|${connection.isStreaming}',
+                            builder: (context, connection, projection) =>
+                                ContextBar(
+                                  connection: connection,
+                                  preferences: _preferences,
+                                  archiveTemporarilyHidden:
+                                      _preferences.archiveVisible &&
+                                      !showArchive,
+                                  inspectorTemporarilyHidden:
+                                      _preferences.inspectorVisible &&
+                                      !showInspector,
+                                  onOpenSettings: _showSettings,
+                                  onToggleInspector: () =>
+                                      unawaited(_preferences.toggleInspector()),
+                                ),
                           ),
-                          Column(
-                            children: [
-                              const SizedBox(height: 28),
-                              BoundConnection(
-                                connection: _connection,
-                                select: (connection, projection) =>
-                                    '${connection.status}|${projection?.chromeEpoch}|${connection.extensionTitle}|${connection.errorMessage}|${connection.isStreaming}',
-                                builder: (context, connection, projection) =>
-                                    ContextBar(
-                                      connection: connection,
-                                      preferences: _preferences,
-                                      archiveTemporarilyHidden:
-                                          _preferences.archiveVisible &&
-                                          !showArchive,
-                                      inspectorTemporarilyHidden:
-                                          _preferences.inspectorVisible &&
-                                          !showInspector,
-                                      onOpenSettings: _showSettings,
-                                      onToggleInspector: () => unawaited(
-                                        _preferences.toggleInspector(),
+                          Expanded(
+                            child: BoundConnection(
+                              connection: _connection,
+                              select: (connection, projection) =>
+                                  '${connection.status}|${projection?.structureEpoch}|${projection?.isStreaming}|${projection?.forkMessages.map((item) => item['entryId']).join(',')}',
+                              builder: (context, connection, projection) {
+                                final landing = _isLanding(projection);
+                                if (landing) {
+                                  return BoundConnection(
+                                    connection: connection,
+                                    select: (inner, innerProjection) =>
+                                        '${inner.status}|${innerProjection?.chromeEpoch}|${inner.extensionEditorText}|${inner.extensionStatuses.length}',
+                                    builder:
+                                        (context, inner, innerProjection) =>
+                                            _LandingWorkspace(
+                                              connection: inner,
+                                              preferences: _preferences,
+                                              promptFocus: _promptFocus,
+                                              draftController: _draftController,
+                                            ),
+                                  );
+                                }
+                                return Column(
+                                  children: [
+                                    Expanded(
+                                      child: TranscriptPane(
+                                        connection: connection,
+                                        projection: projection,
                                       ),
                                     ),
-                              ),
-                              Expanded(
-                                child: BoundConnection(
-                                  connection: _connection,
-                                  select: (connection, projection) =>
-                                      '${connection.status}|${projection?.structureEpoch}|${projection?.chromeEpoch}|${projection?.isStreaming}|${connection.extensionEditorText}|${connection.extensionStatuses.length}',
-                                  builder: (context, connection, projection) {
-                                    final landing = _isLanding(projection);
-                                    if (landing) {
-                                      return _LandingWorkspace(
-                                        connection: connection,
-                                        preferences: _preferences,
-                                        promptFocus: _promptFocus,
-                                        draftController: _draftController,
-                                      );
-                                    }
-                                    return Column(
-                                      children: [
-                                        Expanded(
-                                          child: TranscriptPane(
-                                            connection: connection,
-                                            projection: projection,
-                                          ),
-                                        ),
-                                        Align(
-                                          alignment: Alignment.bottomCenter,
-                                          child: ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxWidth: 760,
-                                            ),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 24,
-                                                  ),
-                                              child: PromptBar(
-                                                connection: connection,
-                                                preferences: _preferences,
-                                                focusNode: _promptFocus,
-                                                draftController:
-                                                    _draftController,
+                                    BoundConnection(
+                                      connection: connection,
+                                      select: (inner, innerProjection) =>
+                                          '${inner.status}|${innerProjection?.chromeEpoch}|${inner.extensionEditorText}|${inner.extensionStatuses.length}|${inner.isStreaming}',
+                                      builder:
+                                          (
+                                            context,
+                                            inner,
+                                            innerProjection,
+                                          ) => Align(
+                                            alignment: Alignment.bottomCenter,
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 760,
+                                              ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 24,
+                                                    ),
+                                                child: PromptBar(
+                                                  connection: inner,
+                                                  preferences: _preferences,
+                                                  focusNode: _promptFocus,
+                                                  draftController:
+                                                      _draftController,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -554,100 +554,95 @@ class _LandingWorkspaceState extends State<_LandingWorkspace> {
   Widget build(BuildContext context) {
     final tokens = PiTokens.of(context);
     final connected = connection.isConnected;
-    return Stack(
-      children: [
-        const Positioned.fill(child: IgnorePointer(child: _DotField())),
-        Align(
-          alignment: connected ? Alignment.topCenter : Alignment.center,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Padding(
-              // The connected workspace mirrors a desktop work surface: the
-              // invitation starts above the visual midpoint, leaving room for
-              // the task shortcuts below it. An unavailable runtime remains
-              // centered so its recovery action is immediately discoverable.
-              padding: EdgeInsets.fromLTRB(32, connected ? 22 : 12, 32, 32),
-              child: Column(
+    return Align(
+      alignment: connected ? Alignment.topCenter : Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: Padding(
+          // The connected workspace mirrors a desktop work surface: the
+          // invitation starts above the visual midpoint, leaving room for
+          // the task shortcuts below it. An unavailable runtime remains
+          // centered so its recovery action is immediately discoverable.
+          padding: EdgeInsets.fromLTRB(32, connected ? 22 : 12, 32, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.auto_awesome, size: 19, color: tokens.accent),
-                      const SizedBox(width: 9),
-                      Flexible(
-                        child: Text(
-                          connected
-                              ? 'What can Pi take off your plate?'
-                              : 'Connect Pi to begin',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: tokens.display.copyWith(fontSize: 29),
-                        ),
-                      ),
-                    ],
+                  Icon(Icons.auto_awesome, size: 19, color: tokens.accent),
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      connected
+                          ? 'What can Pi take off your plate?'
+                          : 'Connect Pi to begin',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.display.copyWith(fontSize: 29),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    connected
-                        ? 'Work directly with the current project and Pi session.'
-                        : 'Pi Desktop connects directly to the official Pi RPC process.',
-                    style: tokens.control.copyWith(
-                      color: tokens.textSoft,
-                      height: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 18),
-                  PromptBar(
-                    connection: connection,
-                    preferences: preferences,
-                    focusNode: promptFocus,
-                    landing: true,
-                    draftController: draftController,
-                  ),
-                  if (connected) ...[
-                    // Keep the invitation and composer high on the page, then
-                    // give the task rail its own calm visual section.
-                    const SizedBox(height: 110),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Start with a task', style: tokens.micro),
-                    ),
-                    const SizedBox(height: 8),
-                    _LandingTask(
-                      icon: Icons.account_tree_outlined,
-                      label: 'Understand this project',
-                      busy: _sending,
-                      onTap: () => unawaited(
-                        _startTask('Please help me understand this project.'),
-                      ),
-                    ),
-                    _LandingTask(
-                      icon: Icons.manage_search_outlined,
-                      label: 'Find insights in files',
-                      busy: _sending,
-                      onTap: () => unawaited(
-                        _startTask(
-                          'Please inspect the project files and surface useful insights.',
-                        ),
-                      ),
-                    ),
-                    _LandingTask(
-                      icon: Icons.edit_note_outlined,
-                      label: 'Plan a change',
-                      busy: _sending,
-                      onTap: () => unawaited(
-                        _startTask('Help me plan a change for this project.'),
-                      ),
-                    ),
-                  ],
                 ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                connected
+                    ? 'Work directly with the current project and Pi session.'
+                    : 'Pi Desktop connects directly to the official Pi RPC process.',
+                style: tokens.control.copyWith(
+                  color: tokens.textSoft,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              PromptBar(
+                connection: connection,
+                preferences: preferences,
+                focusNode: promptFocus,
+                landing: true,
+                draftController: draftController,
+              ),
+              if (connected) ...[
+                // Keep the invitation and composer high on the page, then
+                // give the task rail its own calm visual section.
+                const SizedBox(height: 110),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Start with a task', style: tokens.micro),
+                ),
+                const SizedBox(height: 8),
+                _LandingTask(
+                  icon: Icons.account_tree_outlined,
+                  label: 'Understand this project',
+                  busy: _sending,
+                  onTap: () => unawaited(
+                    _startTask('Please help me understand this project.'),
+                  ),
+                ),
+                _LandingTask(
+                  icon: Icons.manage_search_outlined,
+                  label: 'Find insights in files',
+                  busy: _sending,
+                  onTap: () => unawaited(
+                    _startTask(
+                      'Please inspect the project files and surface useful insights.',
+                    ),
+                  ),
+                ),
+                _LandingTask(
+                  icon: Icons.edit_note_outlined,
+                  label: 'Plan a change',
+                  busy: _sending,
+                  onTap: () => unawaited(
+                    _startTask('Help me plan a change for this project.'),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -695,106 +690,6 @@ class _LandingTask extends StatelessWidget {
       ),
     );
   }
-}
-
-class _DotField extends StatefulWidget {
-  const _DotField({this.intensity = 1, this.spacing = 9});
-
-  final double intensity;
-  final double spacing;
-
-  @override
-  State<_DotField> createState() => _DotFieldState();
-}
-
-class _DotFieldState extends State<_DotField>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _drift = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 18),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _drift.stop();
-    } else if (!_drift.isAnimating) {
-      _drift.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _drift.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = PiTokens.of(context);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return RepaintBoundary(
-      child: CustomPaint(
-        painter: _DotFieldPainter(
-          color: tokens.line.withValues(alpha: 0.5 * widget.intensity),
-          spacing: widget.spacing,
-          phase: reduceMotion ? 0 : _drift.value,
-          repaint: reduceMotion ? null : _drift,
-        ),
-      ),
-    );
-  }
-}
-
-class _DotFieldPainter extends CustomPainter {
-  const _DotFieldPainter({
-    required this.color,
-    required this.spacing,
-    required this.phase,
-    super.repaint,
-  });
-
-  final Color color;
-  final double spacing;
-  final double phase;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pulse = 0.82 + 0.18 * math.sin(phase * math.pi * 2);
-    final paint = Paint()..color = color.withValues(alpha: color.a * pulse);
-    final bounds = Rect.fromCenter(
-      center: Offset(size.width * 0.5, size.height * 0.57),
-      width: 540,
-      height: 500,
-    );
-    final drift = Offset(
-      math.sin(phase * math.pi * 2) * 9,
-      math.cos(phase * math.pi * 2) * 5,
-    );
-    canvas.save();
-    canvas.clipRect(bounds);
-    for (
-      var x = bounds.left - spacing + drift.dx;
-      x < bounds.right + spacing;
-      x += spacing
-    ) {
-      for (
-        var y = bounds.top - spacing + drift.dy;
-        y < bounds.bottom + spacing;
-        y += spacing
-      ) {
-        canvas.drawCircle(Offset(x, y), 0.65, paint);
-      }
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _DotFieldPainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.spacing != spacing ||
-      oldDelegate.phase != phase;
 }
 
 class AbortIntent extends Intent {

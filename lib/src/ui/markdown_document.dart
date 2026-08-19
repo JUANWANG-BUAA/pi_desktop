@@ -8,30 +8,47 @@ import 'widgets.dart';
 ///
 /// This is display-only. It does not rewrite Prompt content or create a second
 /// document model; the source string remains the Pi message.
-class MarkdownDocument extends StatelessWidget {
-  const MarkdownDocument({required this.text, super.key, this.serif = false});
+class MarkdownDocument extends StatefulWidget {
+  const MarkdownDocument({required this.text, super.key});
 
   final String text;
-  final bool serif;
+
+  @override
+  State<MarkdownDocument> createState() => _MarkdownDocumentState();
+}
+
+class _MarkdownDocumentState extends State<MarkdownDocument> {
+  late List<_FenceBlock> _blocks;
+
+  @override
+  void initState() {
+    super.initState();
+    _blocks = _splitFences(widget.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant MarkdownDocument oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _blocks = _splitFences(widget.text);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = PiTokens.of(context);
-    final blocks = _splitFences(text);
-    return SelectionArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final block in blocks)
-            if (block.code)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: CodeSurface(text: block.text, language: block.language),
-              )
-            else
-              ..._renderTextBlock(context, tokens, block.text),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final block in _blocks)
+          if (block.code)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: CodeSurface(text: block.text, language: block.language),
+            )
+          else
+            ..._renderTextBlock(context, tokens, block.text),
+      ],
     );
   }
 
@@ -44,6 +61,7 @@ class MarkdownDocument extends StatelessWidget {
     final lines = raw.split('\n');
     final paragraph = <String>[];
     final listItems = <_ListItem>[];
+    final body = tokens.reading;
 
     void flushParagraph() {
       if (paragraph.isEmpty) {
@@ -52,9 +70,9 @@ class MarkdownDocument extends StatelessWidget {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Text.rich(
+          child: SelectableText.rich(
             _inline(context, tokens, paragraph.join('\n')),
-            style: serif ? tokens.reading : tokens.control,
+            style: body,
           ),
         ),
       );
@@ -79,17 +97,16 @@ class MarkdownDocument extends StatelessWidget {
                     children: [
                       _ListLead(item: entry.text, ordinal: entry.ordinal),
                       Expanded(
-                        child: Text.rich(
+                        child: SelectableText.rich(
                           _inline(context, tokens, _taskText(entry.text)),
-                          style: (serif ? tokens.reading : tokens.control)
-                              .copyWith(
-                                color: _taskDone(entry.text)
-                                    ? tokens.textFaint
-                                    : null,
-                                decoration: _taskDone(entry.text)
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                              ),
+                          style: body.copyWith(
+                            color: _taskDone(entry.text)
+                                ? tokens.textFaint
+                                : null,
+                            decoration: _taskDone(entry.text)
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
                         ),
                       ),
                     ],
@@ -132,9 +149,9 @@ class MarkdownDocument extends StatelessWidget {
         widgets.add(
           Padding(
             padding: EdgeInsets.only(top: level == 1 ? 8 : 4, bottom: 8),
-            child: Text(
+            child: SelectableText(
               heading.group(2)!,
-              style: tokens.control.copyWith(
+              style: body.copyWith(
                 fontSize: level == 1
                     ? 18
                     : level == 2
@@ -142,6 +159,7 @@ class MarkdownDocument extends StatelessWidget {
                     : 14,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.2,
+                height: 1.3,
               ),
             ),
           ),
@@ -175,9 +193,9 @@ class MarkdownDocument extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(left: BorderSide(color: tokens.accent, width: 2)),
             ),
-            child: Text.rich(
+            child: SelectableText.rich(
               _inline(context, tokens, line.substring(2)),
-              style: tokens.reading.copyWith(
+              style: body.copyWith(
                 color: tokens.textSoft,
                 fontStyle: FontStyle.italic,
               ),
@@ -421,13 +439,11 @@ class _MarkdownTable extends StatelessWidget {
                         ),
                         child: Text(
                           c < parsed[r].length ? parsed[r][c] : '',
-                          style: tokens.control.copyWith(
+                          style: tokens.evidence.copyWith(
                             fontSize: 13,
                             fontWeight: r == 0
                                 ? FontWeight.w600
                                 : FontWeight.w400,
-                            fontFamily: 'SF Mono',
-                            fontFamilyFallback: PiTokens.monoFallbacks,
                           ),
                         ),
                       ),

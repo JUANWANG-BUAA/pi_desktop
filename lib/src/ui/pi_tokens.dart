@@ -1,8 +1,32 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 enum PiDensity { compact, standard }
 
-enum PiReadingFont { sans, serif }
+enum PiReadingFont {
+  system,
+  sans,
+  serif,
+  rounded,
+  mono;
+
+  String get label => switch (this) {
+    PiReadingFont.system => 'System',
+    PiReadingFont.sans => 'Sans',
+    PiReadingFont.serif => 'Serif',
+    PiReadingFont.rounded => 'Rounded',
+    PiReadingFont.mono => 'Mono',
+  };
+
+  static PiReadingFont parse(String? raw) {
+    for (final value in PiReadingFont.values) {
+      if (value.name == raw) {
+        return value;
+      }
+    }
+    return PiReadingFont.sans;
+  }
+}
 
 /// Desktop tokens. Dark follows Cursor charcoal; light follows Cowork paper.
 /// Accent is Claude terracotta. No purple, glow, or glass.
@@ -44,13 +68,14 @@ class PiTokens extends ThemeExtension<PiTokens> {
   final PiReadingFont readingFont;
   final double textScale;
 
-  // Font stacks start with the macOS families and fall back through common
-  // Windows/Linux families before the generic CSS names, so typography keeps
-  // its role on every platform instead of collapsing to the OS default.
+  // Prefer families that are actually installed on each OS. Flutter silently
+  // falls back to Roboto when a named family is missing from the font
+  // manifest, which is why "SF Pro Text" / "New York" never visibly changed.
   static const sansFallbacks = <String>[
+    'PingFang SC',
+    '.AppleSystemUIFont',
     'SF Pro Text',
     'Segoe UI',
-    'PingFang SC',
     'Microsoft YaHei',
     'Hiragino Sans GB',
     'Helvetica Neue',
@@ -61,21 +86,32 @@ class PiTokens extends ThemeExtension<PiTokens> {
   ];
 
   static const serifFallbacks = <String>[
-    'New York',
+    'Songti SC',
     'Iowan Old Style',
     'Palatino',
-    'Cambria',
-    'Songti SC',
+    'Georgia',
+    'New York',
     'Noto Serif SC',
     'STSong',
-    'Georgia',
+    'Cambria',
     'Noto Serif',
     'serif',
   ];
 
+  static const roundedFallbacks = <String>[
+    'Yuanti SC',
+    'Hiragino Maru Gothic ProN',
+    'PingFang SC',
+    'Segoe UI',
+    '.AppleSystemUIFont',
+    'Microsoft YaHei',
+    'Noto Sans SC',
+    'sans-serif',
+  ];
+
   static const monoFallbacks = <String>[
-    'SF Mono',
     'Menlo',
+    'SF Mono',
     'Cascadia Code',
     'Cascadia Mono',
     'JetBrains Mono',
@@ -85,22 +121,50 @@ class PiTokens extends ThemeExtension<PiTokens> {
     'monospace',
   ];
 
+  static String platformUiFamily() {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return '.AppleSystemUIFont';
+      case TargetPlatform.windows:
+        return 'Segoe UI';
+      default:
+        return 'Noto Sans';
+    }
+  }
+
+  String get uiFontFamily => switch (readingFont) {
+    PiReadingFont.system => platformUiFamily(),
+    PiReadingFont.sans => 'PingFang SC',
+    PiReadingFont.serif => 'Songti SC',
+    PiReadingFont.rounded => 'Yuanti SC',
+    PiReadingFont.mono => 'Menlo',
+  };
+
+  List<String> get uiFallbacks => switch (readingFont) {
+    PiReadingFont.system => sansFallbacks,
+    PiReadingFont.sans => sansFallbacks,
+    PiReadingFont.serif => serifFallbacks,
+    PiReadingFont.rounded => roundedFallbacks,
+    PiReadingFont.mono => monoFallbacks,
+  };
+
   double get panePadding => density == PiDensity.compact ? 14 : 18;
   double get sectionGap => density == PiDensity.compact ? 14 : 18;
   double get radius => 10;
   double get composerRadius => 16;
   double get chipRadius => 8;
-  double get readingSize =>
-      (density == PiDensity.compact ? 14.5 : 15.5) * textScale;
-  double get controlSize =>
-      (density == PiDensity.compact ? 13 : 13.5) * textScale;
+  // Point size stays density-only. MediaQuery textScaler in PiDesktopApp is
+  // the single global scale, so baking textScale in here would double it.
+  double get readingSize => density == PiDensity.compact ? 14.5 : 15.5;
+  double get controlSize => density == PiDensity.compact ? 13 : 13.5;
   double get microSize => 11;
 
   double get evidenceSize => density == PiDensity.compact ? 12 : 12.5;
 
   TextStyle get micro => TextStyle(
-    fontFamily: 'SF Pro Text',
-    fontFamilyFallback: sansFallbacks,
+    fontFamily: uiFontFamily,
+    fontFamilyFallback: uiFallbacks,
     fontSize: microSize,
     letterSpacing: 0.2,
     fontWeight: FontWeight.w600,
@@ -109,8 +173,8 @@ class PiTokens extends ThemeExtension<PiTokens> {
   );
 
   TextStyle get control => TextStyle(
-    fontFamily: 'SF Pro Text',
-    fontFamilyFallback: sansFallbacks,
+    fontFamily: uiFontFamily,
+    fontFamilyFallback: uiFallbacks,
     fontSize: controlSize,
     fontWeight: FontWeight.w500,
     color: text,
@@ -118,18 +182,16 @@ class PiTokens extends ThemeExtension<PiTokens> {
   );
 
   TextStyle get reading => TextStyle(
-    fontFamily: readingFont == PiReadingFont.serif ? 'New York' : 'SF Pro Text',
-    fontFamilyFallback: readingFont == PiReadingFont.serif
-        ? serifFallbacks
-        : sansFallbacks,
+    fontFamily: uiFontFamily,
+    fontFamilyFallback: uiFallbacks,
     fontSize: readingSize,
     height: 1.65,
     color: text,
   );
 
   TextStyle get display => TextStyle(
-    fontFamily: 'New York',
-    fontFamilyFallback: serifFallbacks,
+    fontFamily: uiFontFamily,
+    fontFamilyFallback: uiFallbacks,
     fontSize: 32,
     height: 1.15,
     fontWeight: FontWeight.w500,
@@ -137,7 +199,7 @@ class PiTokens extends ThemeExtension<PiTokens> {
   );
 
   TextStyle get evidence => TextStyle(
-    fontFamily: 'SF Mono',
+    fontFamily: readingFont == PiReadingFont.mono ? uiFontFamily : 'Menlo',
     fontFamilyFallback: monoFallbacks,
     fontSize: evidenceSize,
     height: 1.45,
@@ -248,6 +310,7 @@ ThemeData buildPiTheme({
   final base = ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    fontFamily: tokens.uiFontFamily,
     visualDensity: density == PiDensity.compact
         ? VisualDensity.compact
         : VisualDensity.standard,
@@ -282,7 +345,7 @@ ThemeData buildPiTheme({
     hoverColor: tokens.accent.withValues(alpha: 0.06),
     focusColor: tokens.accent.withValues(alpha: 0.16),
     textTheme: base.textTheme.apply(
-      fontFamily: 'SF Pro Text',
+      fontFamily: tokens.uiFontFamily,
       bodyColor: tokens.text,
       displayColor: tokens.text,
     ),

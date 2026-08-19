@@ -89,6 +89,7 @@ class _PiDesktopAppState extends State<PiDesktopApp> {
             textScale: _preferences.textScale,
           ),
           builder: (context, child) {
+            final tokens = PiTokens.of(context);
             return MediaQuery(
               data: MediaQuery.of(context).copyWith(
                 // This is a deliberate UI-only reading preference. System
@@ -96,7 +97,13 @@ class _PiDesktopAppState extends State<PiDesktopApp> {
                 textScaler: TextScaler.linear(_preferences.textScale)
                     .clamp(minScaleFactor: 0.9, maxScaleFactor: 1.4),
               ),
-              child: child ?? const SizedBox.shrink(),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(
+                  fontFamily: tokens.uiFontFamily,
+                  fontFamilyFallback: tokens.uiFallbacks,
+                ),
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
           },
           home: ExtensionHost(

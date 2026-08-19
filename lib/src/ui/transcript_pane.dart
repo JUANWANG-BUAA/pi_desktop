@@ -37,11 +37,16 @@ class _TranscriptPaneState extends State<TranscriptPane> {
     super.initState();
     _sessionId = widget.projection?.state?['sessionId'] as String?;
     _controller.addListener(_onScroll);
+    widget.projection?.addListener(_onProjectionTick);
   }
 
   @override
   void didUpdateWidget(covariant TranscriptPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.projection != widget.projection) {
+      oldWidget.projection?.removeListener(_onProjectionTick);
+      widget.projection?.addListener(_onProjectionTick);
+    }
     final sessionId = widget.projection?.state?['sessionId'] as String?;
     if (sessionId != _sessionId) {
       // A different Pi session must not inherit the previous one's reading
@@ -62,11 +67,14 @@ class _TranscriptPaneState extends State<TranscriptPane> {
 
   @override
   void dispose() {
+    widget.projection?.removeListener(_onProjectionTick);
     _controller
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
   }
+
+  void _onProjectionTick() => _scheduleStick();
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +132,10 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 18),
                         child: RepaintBoundary(
-                          child: row.build(key: ValueKey(row.keyFor(index))),
+                          child: row.build(
+                            key: ValueKey(row.keyFor(index)),
+                            onRevert: _revert,
+                          ),
                         ),
                       ),
                     ),
@@ -213,6 +224,7 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   List<_TranscriptRow> _buildTranscriptRows(List<PiTranscriptItem> items) {
     final rows = <_TranscriptRow>[];
     final activity = <PiTranscriptItem>[];
+    final forkIds = _forkIdsFor(items);
 
     void flushActivity() {
       if (activity.isEmpty) return;
@@ -228,26 +240,114 @@ class _TranscriptPaneState extends State<TranscriptPane> {
         activity.add(item);
       } else {
         flushActivity();
-        rows.add(_SingleTranscriptRow(item));
+        rows.add(_SingleTranscriptRow(item, forkEntryId: forkIds[item]));
       }
     }
     flushActivity();
     return rows;
   }
 
-  String _plain(PiTranscriptItem item) {
-    switch (item.kind) {
-      case PiTranscriptKind.message:
-        return format.messageText(item.data!);
-      case PiTranscriptKind.liveTool:
-        return format.toolPayloadText(
-          item.data!['result'] ?? item.data!['partialResult'],
-        );
-      case PiTranscriptKind.timeline:
-        return item.data!['type'] as String? ?? 'event';
-      case PiTranscriptKind.streaming:
-        return item.streamingText ?? '';
+  Map<PiTranscriptItem, String> _forkIdsFor(List<PiTranscriptItem> items) {
+    final forks = widget.projection?.forkMessages ?? const <PiJsonObject>[];
+    if (forks.isEmpty) {
+      return const <PiTranscriptItem, String>{};
     }
+    final ids = <PiTranscriptItem, String>{};
+    final used = <String>{};
+    for (final item in items) {
+      if (item.kind != PiTranscriptKind.message ||
+          item.data?['role'] != 'user') {
+        continue;
+      }
+      final text = format.visibleText(item.data!);
+      PiJsonObject? match;
+      for (final fork in forks) {
+        final entryId = fork['entryId'];
+        if (entryId is! String || entryId.isEmpty || used.contains(entryId)) {
+          continue;
+        }
+        if (fork['text'] == text) {
+          match = fork;
+          break;
+        }
+        match ??= fork;
+      }
+      final entryId = match?['entryId'];
+      if (entryId is String && entryId.isNotEmpty) {
+        used.add(entryId);
+        ids[item] = entryId;
+      }
+    }
+    return ids;
+  }
+
+  Future<void> _revert(String entryId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final tokens = PiTokens.of(context);
+        return AlertDialog(
+          title: Text(
+            'Revert to this message?',
+            style: tokens.display.copyWith(fontSize: 22),
+          ),
+          content: Text(
+            'Pi will fork the session from this user turn. Later turns on the current branch stay in Pi and are not deleted.',
+            style: tokens.control.copyWith(height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Revert'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    try {
+      final response = await widget.connection.fork(entryId);
+      if (!mounted) {
+        return;
+      }
+      if (response.cancelledByExtension) {
+        _toast('A Pi extension cancelled the revert.');
+      } else if (!response.success) {
+        _toast(response.error ?? 'Pi rejected fork.');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        _toast('Pi revert failed: $error');
+      }
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _plain(PiTranscriptItem item) => transcriptItemPlain(item);
+}
+
+String transcriptItemPlain(PiTranscriptItem item) {
+  switch (item.kind) {
+    case PiTranscriptKind.message:
+      return format.messageText(item.data!);
+    case PiTranscriptKind.liveTool:
+      return format.toolPayloadText(
+        item.data!['result'] ?? item.data!['partialResult'],
+      );
+    case PiTranscriptKind.timeline:
+      return item.data!['type'] as String? ?? 'event';
+    case PiTranscriptKind.streaming:
+      return item.streamingText ?? '';
   }
 }
 
@@ -271,13 +371,17 @@ sealed class _TranscriptRow {
   const _TranscriptRow();
 
   String keyFor(int index);
-  Widget build({required Key key});
+  Widget build({
+    required Key key,
+    required Future<void> Function(String entryId) onRevert,
+  });
 }
 
 class _SingleTranscriptRow extends _TranscriptRow {
-  const _SingleTranscriptRow(this.item);
+  const _SingleTranscriptRow(this.item, {this.forkEntryId});
 
   final PiTranscriptItem item;
+  final String? forkEntryId;
 
   @override
   String keyFor(int index) {
@@ -286,7 +390,15 @@ class _SingleTranscriptRow extends _TranscriptRow {
   }
 
   @override
-  Widget build({required Key key}) => TranscriptDocument(key: key, item: item);
+  Widget build({
+    required Key key,
+    required Future<void> Function(String entryId) onRevert,
+  }) => TranscriptDocument(
+    key: key,
+    item: item,
+    forkEntryId: forkEntryId,
+    onRevert: onRevert,
+  );
 }
 
 class _ActivityTranscriptRow extends _TranscriptRow {
@@ -302,7 +414,10 @@ class _ActivityTranscriptRow extends _TranscriptRow {
   }
 
   @override
-  Widget build({required Key key}) => _ActivityCluster(key: key, items: items);
+  Widget build({
+    required Key key,
+    required Future<void> Function(String entryId) onRevert,
+  }) => _ActivityCluster(key: key, items: items);
 }
 
 class _ActivityCluster extends StatelessWidget {
@@ -325,6 +440,7 @@ class _ActivityCluster extends StatelessWidget {
     return FoldBlock(
       title: label,
       accent: PiTokens.of(context).textFaint,
+      clipboardText: items.map(transcriptItemPlain).join('\n\n'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -462,15 +578,26 @@ class EmptyTranscript extends StatelessWidget {
 }
 
 class TranscriptDocument extends StatelessWidget {
-  const TranscriptDocument({required this.item, super.key});
+  const TranscriptDocument({
+    required this.item,
+    super.key,
+    this.forkEntryId,
+    this.onRevert,
+  });
 
   final PiTranscriptItem item;
+  final String? forkEntryId;
+  final Future<void> Function(String entryId)? onRevert;
 
   @override
   Widget build(BuildContext context) {
     switch (item.kind) {
       case PiTranscriptKind.message:
-        return MessageDocument.fromMessage(item.data!);
+        return MessageDocument.fromMessage(
+          item.data!,
+          forkEntryId: forkEntryId,
+          onRevert: onRevert,
+        );
       case PiTranscriptKind.liveTool:
         return ToolEventDocument(event: item.data!);
       case PiTranscriptKind.timeline:
@@ -497,9 +624,15 @@ class MessageDocument extends StatelessWidget {
     this.toolName,
     this.blocks = const <Map<String, dynamic>>[],
     this.payloadText,
+    this.forkEntryId,
+    this.onRevert,
   });
 
-  factory MessageDocument.fromMessage(PiJsonObject message) {
+  factory MessageDocument.fromMessage(
+    PiJsonObject message, {
+    String? forkEntryId,
+    Future<void> Function(String entryId)? onRevert,
+  }) {
     final role = message['role'] as String? ?? 'message';
     return MessageDocument(
       roleLabel: role,
@@ -511,6 +644,8 @@ class MessageDocument extends StatelessWidget {
       payloadText: role == 'toolResult'
           ? format.toolPayloadText(message)
           : null,
+      forkEntryId: forkEntryId,
+      onRevert: onRevert,
     );
   }
 
@@ -522,11 +657,18 @@ class MessageDocument extends StatelessWidget {
   final String? toolName;
   final List<Map<String, dynamic>> blocks;
   final String? payloadText;
+  final String? forkEntryId;
+  final Future<void> Function(String entryId)? onRevert;
 
   @override
   Widget build(BuildContext context) {
     if (roleLabel == 'user') {
-      return _UserBubble(text: text, blocks: blocks);
+      return _UserBubble(
+        text: text,
+        blocks: blocks,
+        forkEntryId: forkEntryId,
+        onRevert: onRevert,
+      );
     }
     if (roleLabel == 'toolResult') {
       return _CollapsedPayload(
@@ -545,10 +687,17 @@ class MessageDocument extends StatelessWidget {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.text, required this.blocks});
+  const _UserBubble({
+    required this.text,
+    required this.blocks,
+    this.forkEntryId,
+    this.onRevert,
+  });
 
   final String text;
   final List<Map<String, dynamic>> blocks;
+  final String? forkEntryId;
+  final Future<void> Function(String entryId)? onRevert;
 
   @override
   Widget build(BuildContext context) {
@@ -560,8 +709,13 @@ class _UserBubble extends StatelessWidget {
         .map(_messageImageBytes)
         .whereType<Uint8List>()
         .toList(growable: false);
-    return Align(
+    return _TurnActions(
       alignment: Alignment.centerRight,
+      copyText: text,
+      revertLabel: forkEntryId == null ? null : 'Revert',
+      onRevert: forkEntryId == null || onRevert == null
+          ? null
+          : () => onRevert!(forkEntryId!),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Container(
@@ -696,6 +850,7 @@ class _AssistantTurn extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: FoldBlock(
               title: 'Thinking',
+              clipboardText: thinkingText,
               child: SelectableText(
                 thinkingText!,
                 style: tokens.reading.copyWith(
@@ -727,9 +882,13 @@ class _AssistantTurn extends StatelessWidget {
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+    return _TurnActions(
+      alignment: Alignment.centerLeft,
+      copyText: text,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 
@@ -744,6 +903,7 @@ class _AssistantTurn extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 10),
           child: FoldBlock(
             title: 'Thinking',
+            clipboardText: thinking,
             child: SelectableText(
               thinking,
               style: tokens.reading.copyWith(
@@ -763,6 +923,7 @@ class _AssistantTurn extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 10),
           child: FoldBlock(
             title: name,
+            clipboardText: argumentText.isEmpty ? null : argumentText,
             child: argumentText.isEmpty
                 ? const SizedBox.shrink()
                 : CodeSurface(text: argumentText),
@@ -855,6 +1016,7 @@ class _CollapsedPayload extends StatelessWidget {
       child: FoldBlock(
         title: title,
         accent: isError ? tokens.signalDanger : tokens.textFaint,
+        clipboardText: text.isEmpty ? null : text,
         child: text.isEmpty
             ? const SizedBox.shrink()
             : CodeSurface(
@@ -887,6 +1049,10 @@ class ToolEventDocument extends StatelessWidget {
     return FoldBlock(
       title: '$toolName · $type',
       accent: isError ? tokens.signalDanger : tokens.textFaint,
+      clipboardText: [
+        if (argsText.isNotEmpty) argsText,
+        if (payloadText.isNotEmpty) payloadText,
+      ].join('\n\n'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -932,6 +1098,96 @@ class TimelineDocument extends StatelessWidget {
     return Text(
       text,
       style: tokens.control.copyWith(color: tokens.textFaint, fontSize: 12.5),
+    );
+  }
+}
+
+class _TurnActions extends StatefulWidget {
+  const _TurnActions({
+    required this.child,
+    required this.alignment,
+    this.copyText,
+    this.onRevert,
+    this.revertLabel,
+  });
+
+  final Widget child;
+  final Alignment alignment;
+  final String? copyText;
+  final Future<void> Function()? onRevert;
+  final String? revertLabel;
+
+  @override
+  State<_TurnActions> createState() => _TurnActionsState();
+}
+
+class _TurnActionsState extends State<_TurnActions> {
+  var _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = PiTokens.of(context);
+    final canCopy = widget.copyText != null && widget.copyText!.isNotEmpty;
+    final canRevert = widget.onRevert != null;
+    if (!canCopy && !canRevert) {
+      return Align(alignment: widget.alignment, child: widget.child);
+    }
+    final endAligned = widget.alignment == Alignment.centerRight;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Column(
+        crossAxisAlignment: endAligned
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Align(alignment: widget.alignment, child: widget.child),
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 140),
+            opacity: _hover ? 1 : 0.42,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (canCopy)
+                    IconButton(
+                      tooltip: 'Copy message',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => copyText(widget.copyText!),
+                      icon: Icon(
+                        Icons.copy_outlined,
+                        size: 14,
+                        color: tokens.textFaint,
+                      ),
+                    ),
+                  if (canRevert)
+                    IconButton(
+                      tooltip: widget.revertLabel ?? 'Revert',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => unawaited(widget.onRevert!()),
+                      icon: Icon(
+                        Icons.undo_rounded,
+                        size: 15,
+                        color: tokens.textFaint,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

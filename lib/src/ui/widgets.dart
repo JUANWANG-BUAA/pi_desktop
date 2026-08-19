@@ -283,6 +283,11 @@ class PiSelect<T> extends StatelessWidget {
   }
 }
 
+/// Expanded FoldBlocks never grow the transcript past this viewport. Longer
+/// Pi traces stay inside the card and scroll there instead of stretching the
+/// conversation.
+const double kFoldBlockMaxHeight = 304;
+
 class FoldBlock extends StatefulWidget {
   const FoldBlock({
     required this.title,
@@ -290,19 +295,43 @@ class FoldBlock extends StatefulWidget {
     super.key,
     this.initiallyExpanded = false,
     this.accent,
+    this.clipboardText,
+    this.maxExpandedHeight = kFoldBlockMaxHeight,
+    this.scrollBody = true,
   });
 
   final String title;
   final Widget child;
   final bool initiallyExpanded;
   final Color? accent;
+  final String? clipboardText;
+  final double maxExpandedHeight;
+  final bool scrollBody;
 
   @override
   State<FoldBlock> createState() => _FoldBlockState();
 }
 
-class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
+class _FoldBlockState extends State<FoldBlock> {
   late var _open = widget.initiallyExpanded;
+  var _generation = 0;
+  final _bodyScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _bodyScroll.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() {
+      _open = !_open;
+      _generation++;
+      if (_open && _bodyScroll.hasClients) {
+        _bodyScroll.jumpTo(0);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -311,10 +340,11 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
     final duration = reducedMotion
         ? Duration.zero
-        : const Duration(milliseconds: 180);
+        : const Duration(milliseconds: 240);
     // Trace data belongs to Pi, but it should recede until a user asks for it.
-    // The deliberately translucent surface gives it a distinct layer without
-    // turning every tool call into a heavy card.
+    // The translucent surface marks the layer without turning every tool call
+    // into a heavy card. Expanded height is capped so a long run cannot shove
+    // the rest of the transcript off-screen.
     return AnimatedContainer(
       duration: duration,
       curve: Curves.easeOutCubic,
@@ -332,6 +362,7 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Semantics(
             button: true,
@@ -340,7 +371,7 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () => setState(() => _open = !_open),
+                onTap: _toggle,
                 borderRadius: BorderRadius.circular(tokens.chipRadius),
                 hoverColor: tokens.panelSoft.withValues(alpha: 0.32),
                 child: Padding(
@@ -372,6 +403,23 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      if (widget.clipboardText != null &&
+                          widget.clipboardText!.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Copy',
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          padding: EdgeInsets.zero,
+                          onPressed: () => copyText(widget.clipboardText!),
+                          icon: Icon(
+                            Icons.copy_outlined,
+                            size: 14,
+                            color: tokens.textFaint,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -382,17 +430,19 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
             duration: duration,
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
+            clipBehavior: Clip.hardEdge,
             child: _open
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(14, 2, 12, 12),
                     child: TweenAnimationBuilder<double>(
+                      key: ValueKey(_generation),
                       duration: duration,
                       curve: Curves.easeOut,
                       tween: Tween(begin: 0, end: 1),
                       builder: (context, value, child) => Opacity(
                         opacity: value,
                         child: Transform.translate(
-                          offset: Offset(0, (1 - value) * -4),
+                          offset: Offset(0, (1 - value) * 6),
                           child: child,
                         ),
                       ),
@@ -405,11 +455,26 @@ class _FoldBlockState extends State<FoldBlock> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-                        child: widget.child,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: widget.maxExpandedHeight,
+                          ),
+                          child: widget.scrollBody
+                              ? Scrollbar(
+                                  controller: _bodyScroll,
+                                  child: SingleChildScrollView(
+                                    controller: _bodyScroll,
+                                    primary: false,
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: widget.child,
+                                  ),
+                                )
+                              : widget.child,
+                        ),
                       ),
                     ),
                   )
-                : const SizedBox.shrink(),
+                : const SizedBox(width: double.infinity),
           ),
         ],
       ),

@@ -75,12 +75,16 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Reading font'), findsOneWidget);
+    expect(find.text('Interface font'), findsOneWidget);
     expect(find.text('Pi apps & extensions'), findsOneWidget);
 
     await tester.tap(find.text('Serif'));
     await tester.pump();
     expect(preferences.readingFont, PiReadingFont.serif);
+
+    await tester.tap(find.text('Mono'));
+    await tester.pump();
+    expect(preferences.readingFont, PiReadingFont.mono);
 
     await tester.drag(find.byType(Slider), const Offset(120, 0));
     await tester.pump();

@@ -40,9 +40,7 @@ class UiPreferences extends ChangeNotifier {
           density = json['density'] == 'compact'
               ? PiDensity.compact
               : PiDensity.standard;
-          readingFont = json['readingFont'] == 'serif'
-              ? PiReadingFont.serif
-              : PiReadingFont.sans;
+          readingFont = PiReadingFont.parse(json['readingFont'] as String?);
           textScale = ((json['textScale'] as num?)?.toDouble() ?? 1).clamp(
             0.9,
             1.4,
@@ -220,7 +218,7 @@ class UiPreferences extends ChangeNotifier {
         const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
           'themeMode': themeMode == ThemeMode.light ? 'light' : 'dark',
           'density': density == PiDensity.standard ? 'standard' : 'compact',
-          'readingFont': readingFont == PiReadingFont.serif ? 'serif' : 'sans',
+          'readingFont': readingFont.name,
           'textScale': textScale,
           'archiveWidth': archiveWidth,
           'archiveVisible': archiveVisible,
