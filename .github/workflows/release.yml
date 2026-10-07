@@ -38,7 +38,7 @@ jobs:
       - run: flutter config --enable-${{ matrix.target }}-desktop
       - run: flutter build ${{ matrix.target }} --release
       - name: Upload unsigned artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pi-desktop-${{ matrix.target }}-${{ github.ref_name }}
           path: |
